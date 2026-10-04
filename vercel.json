@@ -1,10 +1,22 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "app.py": {
-      "maxDuration": 60,
-      "includeFiles": "{frontend/**,backend/data/recommendations.txt}",
-      "excludeFiles": "{.venv/**,backend/data/*.csv,backend/models/**,ml/**,**/__pycache__/**}"
+  "services": {
+    "app": {
+      "root": ".",
+      "framework": "flask",
+      "functions": {
+        "app.py": {
+          "maxDuration": 60,
+          "includeFiles": "{frontend/**,backend/data/recommendations.txt}",
+          "excludeFiles": "{.venv/**,backend/data/*.csv,backend/models/**,ml/**,**/__pycache__/**}"
+        }
+      }
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": { "service": "app" }
+    }
+  ]
 }
