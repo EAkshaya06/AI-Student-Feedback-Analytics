@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Share your experience · Teacher Feedback Intelligence</title>
+
+    <link rel="stylesheet"
+          href="/css/style.css">
+
+</head>
+
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+
+    <header class="navbar">
+
+        <div class="nav-container">
+
+            <div class="logo">
+                Teacher Feedback Intelligence
+            </div>
+
+            <nav class="nav-links">
+
+                <a href="/">
+                    Home
+                </a>
+
+                <a href="/dashboard">
+                    Dashboard
+                </a>
+
+                <a href="/insights">AI Insight Center</a>
+
+                <a href="/feedback"
+                   class="active">
+                    Analyze Feedback
+                </a>
+
+                <a href="/analysis">
+                    Analytics
+                </a>
+
+                <a href="/predictions">
+                    Predictions
+                </a>
+
+            </nav>
+
+        </div>
+
+    </header>
+
+
+    <!-- ================= MAIN ================= -->
+
+    <main class="dashboard-container">
+
+        <div class="dashboard-header">
+
+            <div>
+
+                    <h1>Share your teaching experience</h1>
+
+                <p>
+                    Your words are analyzed for multiple teaching aspects, then shown with evidence and confidence.
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <!-- ================= INPUT CARD ================= -->
+
+        <section class="dashboard-card"
+                 style="max-width:900px; margin:auto;">
+
+            <div class="card-header">
+
+                <div>
+
+                    <h3>
+                        📝 Tell us what happened
+                    </h3>
+
+                    <p>
+                        Write naturally. Praise, concerns, and suggestions can all appear together.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <label for="departmentField">Department (optional)</label>
+            <input id="departmentField" maxlength="160" placeholder="e.g. Computer Science" class="feedback-meta">
+            <label for="courseField">Course (optional)</label>
+            <input id="courseField" maxlength="160" placeholder="e.g. Machine Learning" class="feedback-meta">
+            <label for="facultyField">Faculty member (optional)</label>
+            <input id="facultyField" maxlength="160" placeholder="Faculty name" class="feedback-meta">
+            <label for="feedbackText">Your feedback</label>
+            <textarea
+                id="feedbackText"
+                maxlength="5000"
+                placeholder="Example: The explanations are clear, but the lectures move quickly. More practical problems would help."
+                style="
+                    width:100%;
+                    min-height:180px;
+                    padding:15px;
+                    border:1px solid #dbe2ea;
+                    border-radius:10px;
+                    resize:vertical;
+                    font-size:15px;
+                    font-family:inherit;
+                    box-sizing:border-box;
+                "></textarea>
+
+
+            <button
+                id="analyzeButton"
+                class="primary-btn"
+                style="margin-top:20px;"
+                onclick="analyzeFeedback()">
+
+                Preview analysis
+
+            </button>
+
+            <p class="privacy-note">Anonymous by design: no student identity is requested or stored.</p>
+            <button id="submitButton" class="primary-btn" style="margin-top:12px;" onclick="submitFeedback()">Submit feedback</button>
+
+
+            <!-- ================= RESULT ================= -->
+
+            <div id="analysisResult"
+                 style="margin-top:30px;">
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= EXPLANATION ================= -->
+
+        <section class="dashboard-card"
+                 style="
+                    max-width:900px;
+                    margin:25px auto 0;
+                 ">
+
+            <div class="card-header">
+
+                <div>
+
+                    <h3>
+                        🧠 How It Works
+                    </h3>
+
+                </div>
+
+            </div>
+
+            <div class="insights-list">
+
+                <div class="insight-item">
+
+                    <span>1️⃣</span>
+
+                    <p>
+                        The student enters feedback.
+                    </p>
+
+                </div>
+
+                <div class="insight-item">
+
+                    <span>2️⃣</span>
+
+                    <p>
+                        The feedback is sent to the
+                        Flask AI backend.
+                    </p>
+
+                </div>
+
+                <div class="insight-item">
+
+                    <span>3️⃣</span>
+
+                    <p>
+                        The system analyzes positive
+                        and negative language.
+                    </p>
+
+                </div>
+
+                <div class="insight-item">
+
+                    <span>4️⃣</span>
+
+                    <p>
+                        The predicted sentiment is
+                        displayed to the user.
+                    </p>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <script src="/js/feedback.js"></script>
+
+</body>
+
+</html>

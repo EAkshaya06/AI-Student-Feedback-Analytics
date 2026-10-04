@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Student Feedback Dashboard</title>
+
+    <link rel="stylesheet" href="/css/style.css">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+
+    <header class="navbar">
+
+        <div class="nav-container">
+
+            <div class="logo">
+                Teacher Feedback Intelligence
+            </div>
+
+            <nav class="nav-links">
+
+                <a href="/">Home</a>
+
+                <a href="/dashboard" class="active">
+                    Dashboard
+                </a>
+
+                <a href="/feedback">
+                    Analyze Feedback
+                </a>
+
+                <a href="/analysis">
+                    Analytics
+                </a>
+
+                <a href="/predictions">
+                    Predictions
+                </a>
+
+            </nav>
+
+        </div>
+
+    </header>
+
+
+    <!-- ================= DASHBOARD ================= -->
+
+    <main class="dashboard-container">
+
+        <div class="dashboard-header">
+
+            <div>
+
+                <h1>
+                    Student Feedback Dashboard
+                </h1>
+
+                <p>
+                    AI-powered analysis of student feedback,
+                    sentiment, emotions and topics.
+                </p>
+
+            </div>
+
+            <button
+                class="primary-btn"
+                onclick="loadDashboard()">
+
+                🔄 Refresh Data
+
+            </button>
+
+        </div>
+
+
+        <!-- ================= STAT CARDS ================= -->
+
+        <section class="stats-grid">
+
+            <div class="stat-card">
+
+                <div class="stat-icon">
+                    📝
+                </div>
+
+                <div>
+
+                    <p>
+                        Total Feedback
+                    </p>
+
+                    <h2 id="totalFeedback">
+                        0
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-icon">
+                    😊
+                </div>
+
+                <div>
+
+                    <p>
+                        Positive Feedback
+                    </p>
+
+                    <h2 id="positiveFeedback">
+                        0%
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-icon">
+                    😐
+                </div>
+
+                <div>
+
+                    <p>
+                        Neutral Feedback
+                    </p>
+
+                    <h2 id="neutralFeedback">
+                        0%
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-icon">
+                    😞
+                </div>
+
+                <div>
+
+                    <p>
+                        Negative Feedback
+                    </p>
+
+                    <h2 id="negativeFeedback">
+                        0%
+                    </h2>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= CHARTS ================= -->
+
+        <section class="charts-grid">
+
+
+            <!-- SENTIMENT -->
+
+            <div class="dashboard-card">
+
+                <div class="card-header">
+
+                    <div>
+
+                        <h3>
+                            Sentiment Analysis
+                        </h3>
+
+                        <p>
+                            Overall student sentiment
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="chart-container">
+
+                    <canvas id="sentimentChart"></canvas>
+
+                </div>
+
+            </div>
+
+
+            <!-- EMOTION -->
+
+            <div class="dashboard-card">
+
+                <div class="card-header">
+
+                    <div>
+
+                        <h3>
+                            Emotion Detection
+                        </h3>
+
+                        <p>
+                            Detected emotions in feedback
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="chart-container">
+
+                    <canvas id="emotionChart"></canvas>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= CATEGORY ================= -->
+
+        <section class="dashboard-card topic-card">
+
+            <div class="card-header">
+
+                <div>
+
+                    <h3>
+                        Feedback by Category
+                    </h3>
+
+                    <p>
+                        Distribution of student feedback
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="chart-container large-chart">
+
+                <canvas id="categoryChart"></canvas>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= SENTIMENT CATEGORY ================= -->
+
+        <section class="dashboard-card topic-card">
+
+            <div class="card-header">
+
+                <div>
+
+                    <h3>
+                        Sentiment by Category
+                    </h3>
+
+                    <p>
+                        Positive, neutral and negative feedback across categories
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="chart-container large-chart">
+
+                <canvas id="sentimentCategoryChart"></canvas>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= RECENT FEEDBACK ================= -->
+
+        <section class="dashboard-card topic-card">
+
+            <div class="card-header">
+
+                <div>
+
+                    <h3>
+                        Recent Student Feedback
+                    </h3>
+
+                    <p>
+                        Sample feedback from the dataset
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div id="feedbackTableContainer">
+
+                <p class="loading">
+                    Loading feedback...
+                </p>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= RECOMMENDATIONS ================= -->
+
+        <section class="insights-grid">
+
+            <div class="dashboard-card">
+
+                <div class="card-header">
+
+                    <div>
+
+                        <h3>
+                            💡 AI Recommendations
+                        </h3>
+
+                        <p>
+                            Suggested improvement areas
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div
+                    id="recommendations"
+                    class="insights-list">
+
+                    <p class="loading">
+                        Loading recommendations...
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <div class="dashboard-card">
+
+                <div class="card-header">
+
+                    <div>
+
+                        <h3>
+                            📊 Dataset Information
+                        </h3>
+
+                        <p>
+                            Current analysis dataset
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="insights-list">
+
+                    <div class="insight-item">
+
+                        <span>📝</span>
+
+                        <p>
+                            <strong>Total records:</strong>
+                            <span id="datasetRecords">
+                                Loading...
+                            </span>
+                        </p>
+
+                    </div>
+
+
+                    <div class="insight-item">
+
+                        <span>🤖</span>
+
+                        <p>
+                            <strong>Analysis:</strong>
+                            Sentiment, emotion and topic analysis
+                        </p>
+
+                    </div>
+
+
+                    <div class="insight-item">
+
+                        <span>🧠</span>
+
+                        <p>
+                            <strong>ML:</strong>
+                            TF-IDF and Logistic Regression
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- STATUS -->
+
+        <div
+            id="dashboardStatus"
+            class="dashboard-status">
+
+            Loading dashboard data...
+
+        </div>
+
+    </main>
+
+
+    <!-- ================= JAVASCRIPT ================= -->
+
+    <script src="/js/dashboard.js"></script>
+
+</body>
+
+</html>

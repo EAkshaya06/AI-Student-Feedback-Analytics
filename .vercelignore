@@ -1,0 +1,6 @@
+.venv/
+backend/data/*.csv
+backend/models/
+ml/
+**/__pycache__/
+*.pyc

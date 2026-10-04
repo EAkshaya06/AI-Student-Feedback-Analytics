@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+backend/.venv/
+backend/data/feedback_submissions.sqlite3
+.env
+backend/.env
+backend/data/*.csv
+backend/models/*.pkl
+.vercel/

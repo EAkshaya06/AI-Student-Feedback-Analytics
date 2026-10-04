@@ -1,0 +1,6 @@
+examination is performing relatively well based on current sentiment.
+Monitor library_facilities closely and identify recurring student concerns.
+teaching is performing relatively well based on current sentiment.
+High attention required for labwork. Around 33.7% of feedback is negative.
+extracurricular is performing relatively well based on current sentiment.
+Monitor course_content closely and identify recurring student concerns.

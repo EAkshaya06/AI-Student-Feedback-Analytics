@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Predictive Analytics</title>
+
+    <link rel="stylesheet"
+          href="/css/style.css">
+
+</head>
+
+
+<body>
+
+
+    <!-- ================= NAVBAR ================= -->
+
+    <header class="navbar">
+
+        <div class="nav-container">
+
+            <div class="logo">
+                Teacher Feedback Intelligence
+            </div>
+
+            <nav class="nav-links">
+
+                <a href="/">
+                    Home
+                </a>
+
+                <a href="/dashboard">
+                    Dashboard
+                </a>
+
+                <a href="/feedback">
+                    Analyze Feedback
+                </a>
+
+                <a href="/analysis">
+                    Analytics
+                </a>
+
+                <a href="/predictions"
+                   class="active">
+                    Predictions
+                </a>
+
+            </nav>
+
+        </div>
+
+    </header>
+
+
+    <!-- ================= MAIN ================= -->
+
+    <main class="dashboard-container">
+
+
+        <div class="dashboard-header">
+
+            <div>
+
+                <h1>
+                    Predictive Analytics
+                </h1>
+
+                <p>
+                    Machine-learning based sentiment
+                    predictions from student feedback.
+                </p>
+
+            </div>
+
+
+            <button
+                class="primary-btn"
+                onclick="loadPredictions()">
+
+                🔄 Refresh
+
+            </button>
+
+        </div>
+
+
+        <!-- ================= SUMMARY ================= -->
+
+        <section class="stats-grid">
+
+
+            <div class="stat-card">
+
+                <div class="stat-icon">
+                    📝
+                </div>
+
+                <div>
+
+                    <p>
+                        Records Analyzed
+                    </p>
+
+                    <h2 id="predictionTotal">
+                        0
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-icon">
+                    😊
+                </div>
+
+                <div>
+
+                    <p>
+                        Predicted Positive
+                    </p>
+
+                    <h2 id="predictionPositive">
+                        0
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-icon">
+                    😐
+                </div>
+
+                <div>
+
+                    <p>
+                        Predicted Neutral
+                    </p>
+
+                    <h2 id="predictionNeutral">
+                        0
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-icon">
+                    😞
+                </div>
+
+                <div>
+
+                    <p>
+                        Predicted Negative
+                    </p>
+
+                    <h2 id="predictionNegative">
+                        0
+                    </h2>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= PREDICTION CHART ================= -->
+
+        <section class="dashboard-card topic-card">
+
+            <div class="card-header">
+
+                <div>
+
+                    <h3>
+                        🤖 Model Prediction Distribution
+                    </h3>
+
+                    <p>
+                        Sentiment predicted by the trained
+                        machine-learning model.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <div class="chart-container large-chart">
+
+                <canvas id="predictionChart"></canvas>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= MODEL INFORMATION ================= -->
+
+        <section class="insights-grid">
+
+
+            <div class="dashboard-card">
+
+                <div class="card-header">
+
+                    <div>
+
+                        <h3>
+                            🧠 Model Information
+                        </h3>
+
+                    </div>
+
+                </div>
+
+
+                <div class="insights-list">
+
+
+                    <div class="insight-item">
+
+                        <span>🔤</span>
+
+                        <p>
+
+                            <strong>
+                                Feature Extraction:
+                            </strong>
+
+                            TF-IDF
+
+                        </p>
+
+                    </div>
+
+
+                    <div class="insight-item">
+
+                        <span>🤖</span>
+
+                        <p>
+
+                            <strong>
+                                Algorithm:
+                            </strong>
+
+                            Logistic Regression
+
+                        </p>
+
+                    </div>
+
+
+                    <div class="insight-item">
+
+                        <span>📚</span>
+
+                        <p>
+
+                            <strong>
+                                Classes:
+                            </strong>
+
+                            Positive, Neutral, Negative
+
+                        </p>
+
+                    </div>
+
+
+                    <div class="insight-item">
+
+                        <span>📊</span>
+
+                        <p>
+
+                            <strong>
+                                Dataset:
+                            </strong>
+
+                            Student Feedback
+
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="dashboard-card">
+
+                <div class="card-header">
+
+                    <div>
+
+                        <h3>
+                            ℹ️ About Predictions
+                        </h3>
+
+                    </div>
+
+                </div>
+
+
+                <div class="insights-list">
+
+                    <div class="insight-item">
+
+                        <span>1️⃣</span>
+
+                        <p>
+                            Feedback is converted into
+                            numerical TF-IDF features.
+                        </p>
+
+                    </div>
+
+
+                    <div class="insight-item">
+
+                        <span>2️⃣</span>
+
+                        <p>
+                            The trained classification
+                            model predicts sentiment.
+                        </p>
+
+                    </div>
+
+
+                    <div class="insight-item">
+
+                        <span>3️⃣</span>
+
+                        <p>
+                            Predictions are summarized
+                            for decision-making.
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= STATUS ================= -->
+
+        <div id="predictionStatus"
+             class="dashboard-status">
+
+            Loading predictions...
+
+        </div>
+
+
+    </main>
+
+
+    <script src="/js/prediction.js"></script>
+
+</body>
+
+</html>
