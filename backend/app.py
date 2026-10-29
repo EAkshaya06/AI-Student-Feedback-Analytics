@@ -247,7 +247,6 @@ def home():
 # =========================================================
 
 @app.route("/dashboard")
-@require_roles("admin")
 def dashboard():
 
     return send_from_directory(
@@ -274,7 +273,6 @@ def feedback_page():
 # =========================================================
 
 @app.route("/analysis")
-@require_roles("admin")
 def analysis_page():
 
     return send_from_directory(
@@ -288,7 +286,6 @@ def analysis_page():
 # =========================================================
 
 @app.route("/predictions")
-@require_roles("admin")
 def predictions_page():
 
     return send_from_directory(
@@ -529,6 +526,31 @@ def create_faculty_user():
             password_hash=generate_password_hash(password), role="faculty", faculty_key=faculty_key, active=True))
     return jsonify({"success":True,"message":"Faculty account created."}), 201
 
+@app.route("/api/public-dataset")
+def public_dataset():
+    """Read-only historical dataset for the public project dashboard."""
+    df = normalize_data(load_data())
+    if df.empty:
+        return jsonify({"success": True, "total": 0, "data": [], "sentiment": {}, "emotion": {}, "category": {}, "sentiment_by_category": {}})
+    sentiment = df["sentiment"].value_counts().to_dict()
+    total = len(df)
+    cross = pd.crosstab(df["category"], df["sentiment"]).fillna(0)
+    return jsonify({
+        "success": True, "total": total,
+        "positive": int(sentiment.get("positive", 0)),
+        "neutral": int(sentiment.get("neutral", 0)),
+        "negative": int(sentiment.get("negative", 0)),
+        "positive_percentage": round(sentiment.get("positive", 0) / total * 100, 2),
+        "neutral_percentage": round(sentiment.get("neutral", 0) / total * 100, 2),
+        "negative_percentage": round(sentiment.get("negative", 0) / total * 100, 2),
+        "sentiment": sentiment,
+        "emotion": df["emotion"].value_counts().to_dict(),
+        "category": df["category"].value_counts().to_dict(),
+        "sentiment_by_category": {str(k): v.to_dict() for k, v in cross.iterrows()},
+        "data": df.to_dict(orient="records")
+    })
+
+
 @app.route("/api/feedback")
 @require_roles("admin")
 def get_feedback():
@@ -764,7 +786,7 @@ def analyze_feedback():
     if error:
         return jsonify({"success": False, "message": error}), 400
     teacher_email = str(data.get("teacher_email", "")).strip().lower()
-    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", teacher_email):
+    if teacher_email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", teacher_email):
         return jsonify({"success": False, "message": "Enter a valid teacher college email address."}), 400
     result = _analyze_feedback_batch(comments)
     result.update({"success": True, "teacher_email": teacher_email})
