@@ -10,7 +10,6 @@ function getFeedbackInput() {
         .split(/\r?\n/)
         .map(comment => comment.trim())
         .filter(Boolean);
-    if (!email) throw new Error("Enter the teacher's college email address.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid teacher email address.");
     if (!comments.length) throw new Error("Paste at least one student comment, one per line.");
     if (comments.length > 25) throw new Error("Analyze up to 25 comments at a time.");
@@ -18,7 +17,7 @@ function getFeedbackInput() {
         throw new Error("Keep each comment under 5,000 characters and the total under 20,000 characters.");
     }
     return {
-        teacher_email: email,
+        teacher_email: email || "",
         comments,
         department: document.getElementById("departmentField").value.trim(),
         course: document.getElementById("courseField").value.trim()
