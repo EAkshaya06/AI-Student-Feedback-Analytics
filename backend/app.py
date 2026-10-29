@@ -619,8 +619,8 @@ def analyze_feedback():
     if error:
         return jsonify({"success": False, "message": error}), 400
     teacher_email = str(data.get("teacher_email", "")).strip().lower()
-    if teacher_email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", teacher_email):
-        return jsonify({"success": False, "message": "Enter a valid teacher email address or leave it blank."}), 400
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", teacher_email):
+        return jsonify({"success": False, "message": "Enter a valid teacher college email address."}), 400
     result = _analyze_feedback_batch(comments)
     result.update({"success": True, "teacher_email": teacher_email})
     return jsonify(result)
@@ -636,8 +636,8 @@ def submit_feedback():
     if error:
         return jsonify({"success": False, "message": error}), 400
     teacher_email = str(data.get("teacher_email", "")).strip().lower()
-    if teacher_email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", teacher_email):
-        return jsonify({"success": False, "message": "Enter a valid teacher email address or leave it blank."}), 400
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", teacher_email):
+        return jsonify({"success": False, "message": "Enter a valid teacher college email address."}), 400
     fields = [str(data.get(k, "")).strip()[:160] for k in ("department", "course")]
     faculty_name = str(data.get("faculty", "")).strip()[:160]
     faculty_label = teacher_email or faculty_name
