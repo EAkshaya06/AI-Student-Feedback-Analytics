@@ -680,88 +680,45 @@ async function loadFeedback() {
 // ======================================================
 
 async function loadRecommendations() {
-
-    const container =
-        document.getElementById(
-            "recommendations"
-        );
-
-
+    const container = document.getElementById("recommendations");
     try {
+        const response = await fetch("/api/public-dataset");
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error("Could not load dataset insights.");
 
-        const response =
-            await fetch(
-                "/api/recommendations"
-            );
+        const areas = Object.entries(result.sentiment_by_category || {})
+            .map(([category, counts]) => {
+                const positive = counts.positive || 0;
+                const neutral = counts.neutral || 0;
+                const negative = counts.negative || 0;
+                return {category, positive, neutral, negative, total: positive + neutral + negative};
+            })
+            .filter(item => item.negative > 0 && item.total > 0)
+            .sort((a, b) => (b.negative / b.total) - (a.negative / a.total))
+            .slice(0, 3);
 
-
-        const result =
-            await response.json();
-
-
-        console.log(
-            "Recommendations:",
-            result
-        );
-
-
-        if (
-            !result.success ||
-            !result.recommendations ||
-            result.recommendations.length === 0
-        ) {
-
-            container.innerHTML =
-                "<p>No recommendations available.</p>";
-
+        container.innerHTML = "";
+        if (!areas.length) {
+            container.textContent = "No improvement areas were identified in the historical dataset.";
             return;
         }
 
-
-        container.innerHTML = "";
-
-
-        result.recommendations.forEach(
-            recommendation => {
-
-                const div =
-                    document.createElement(
-                        "div"
-                    );
-
-
-                div.className =
-                    "insight-item";
-
-
-                div.innerHTML = `
-
-                    <span>💡</span>
-
-                    <p>
-                        ${escapeHTML(
-                            recommendation
-                        )}
-                    </p>
-
-                `;
-
-
-                container.appendChild(div);
-
-            }
-        );
-
-
+        areas.forEach(item => {
+            const div = document.createElement("div");
+            div.className = "insight-item";
+            const icon = document.createElement("span");
+            icon.textContent = "💡";
+            const p = document.createElement("p");
+            const rate = Math.round(item.negative / item.total * 100);
+            p.textContent = item.category.replaceAll("_", " ") + ": " + item.negative +
+                " of " + item.total + " comments were negative (" + rate +
+                "%). Review these comments for possible improvements.";
+            div.append(icon, p);
+            container.appendChild(div);
+        });
     } catch (error) {
-
-        console.error(
-            "Recommendation error:",
-            error
-        );
-
-        container.innerHTML =
-            "<p>Unable to load recommendations.</p>";
+        console.error("Dataset insight error:", error);
+        container.textContent = "Unable to load dataset insights.";
     }
 }
 
