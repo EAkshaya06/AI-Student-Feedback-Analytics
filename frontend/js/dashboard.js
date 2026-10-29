@@ -30,7 +30,7 @@ async function loadDashboard() {
         // ----------------------------------------------
 
         const analyticsResponse =
-            await fetch("/api/analytics");
+            await fetch("/api/public-dataset");
 
         if (!analyticsResponse.ok) {
 
