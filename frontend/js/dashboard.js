@@ -489,7 +489,7 @@ async function loadFeedback() {
     try {
 
         const response =
-            await fetch("/api/feedback");
+            await fetch("/api/public-dataset");
 
 
         const result =
