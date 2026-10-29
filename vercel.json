@@ -7,8 +7,8 @@
       "functions": {
         "app.py": {
           "maxDuration": 60,
-          "includeFiles": "{frontend/**,backend/data/recommendations.txt}",
-          "excludeFiles": "{.venv/**,backend/data/*.csv,backend/models/**,ml/**,**/__pycache__/**}"
+          "includeFiles": "{frontend/**,backend/data/recommendations.txt,backend/data/final_feedback_analysis.csv}",
+          "excludeFiles": "{.venv/**,backend/models/**,ml/**,**/__pycache__/**}"
         }
       }
     }
@@ -16,7 +16,9 @@
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": { "service": "app" }
+      "destination": {
+        "service": "app"
+      }
     }
   ]
 }
