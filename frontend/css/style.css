@@ -1144,3 +1144,11 @@ footer { display:flex; justify-content:space-between; gap:20px; padding:23px cla
 .batch-comment>div { display:flex; justify-content:space-between; align-items:center; gap:12px; }
 .batch-comment p { margin:9px 0; color:#35483f; overflow-wrap:anywhere; }
 .batch-comment small { color:#68758a; }
+
+
+/* Passwordless teacher sign-in */
+.login-card[hidden] { display:none; }
+.login-switch { margin:14px 0 0; color:#66746c; font-size:13px; }
+.login-switch a { color:var(--jade); font-weight:700; }
+.login-card [role="status"] { min-height:1.5em; line-height:1.5; }
+.login-card button:disabled { cursor:wait; opacity:.7; }
