@@ -3,37 +3,37 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Teacher sign in · Teacher Feedback Intelligence</title>
+  <title>Staff sign in · AI Student Feedback Analytics</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body class="login-page">
   <header class="navbar">
-    <a class="logo" href="/">Teacher Feedback Intelligence</a>
+    <a class="logo" href="/">AI Student Feedback Analytics</a>
     <nav aria-label="Main navigation">
       <a href="/">Home</a>
       <a href="/feedback">Share feedback</a>
-      <a href="/teacher-login" class="active">Teacher sign in</a>
-      <a href="/login">Admin sign in</a>
+      <a href="/teacher-login" class="active">Staff sign in</a>
+      
     </nav>
   </header>
   <main class="login-wrap">
     <section class="login-art">
       <span class="eyebrow">TEACHER ACCESS</span>
       <h1>Listen closer.<br><em>Teach forward.</em></h1>
-      <p>Open your teaching insights with a secure one-time email link. No password to remember.</p>
+      <p>Optional passwordless access to staff insights for this student project.</p>
       <div class="login-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
     </section>
     <section class="login-card" id="requestCard">
-      <span class="eyebrow">PASSWORDLESS SIGN IN</span>
-      <h2>Teacher sign in</h2>
-      <p>Enter the university email already registered for your faculty account.</p>
+      <span class="eyebrow">OPTIONAL STAFF ACCESS</span>
+      <h2>Staff sign in</h2>
+      <p>Enter an email only if you already have a staff account for this project. We use it only to send a one-time sign-in link; this is not an official college portal.</p>
       <form id="teacherLinkForm">
-        <label for="teacherEmail">University email</label>
-        <input id="teacherEmail" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="name@university.edu">
-        <button class="primary-btn" type="submit">Email me a sign-in link <span aria-hidden="true">→</span></button>
+        <label for="teacherEmail">Staff account email</label>
+        <input id="teacherEmail" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="name@example.edu">
+        <button class="primary-btn" type="submit">Send one-time link <span aria-hidden="true">→</span></button>
         <p id="teacherLinkMessage" class="login-error" role="status" aria-live="polite"></p>
       </form>
-      <p class="login-footnote">Only faculty accounts provisioned by the university can sign in. The link expires after 10 minutes and works once.</p>
+      <p class="login-footnote">Only staff accounts set up for this project can sign in. The link expires after 10 minutes and works once.</p>
     </section>
     <section class="login-card" id="verifyCard" hidden>
       <span class="eyebrow">ONE-TIME SIGN IN</span>
