@@ -67,10 +67,10 @@
 
             <div>
 
-                    <h1>Share your teaching experience</h1>
+                    <h1>Analyze teacher feedback</h1>
 
                 <p>
-                    Your words are analyzed for multiple teaching aspects, then shown with evidence and confidence.
+                    Enter comments from students about a teacher to see an aspect-by-aspect summary.
                 </p>
 
             </div>
@@ -92,7 +92,7 @@
                     </h3>
 
                     <p>
-                        Write naturally. Praise, concerns, and suggestions can all appear together.
+                        Paste comments from students. Each non-empty line is analyzed as one comment.
                     </p>
 
                 </div>
@@ -104,13 +104,16 @@
             <input id="departmentField" maxlength="160" placeholder="e.g. Computer Science" class="feedback-meta">
             <label for="courseField">Course (optional)</label>
             <input id="courseField" maxlength="160" placeholder="e.g. Machine Learning" class="feedback-meta">
-            <label for="facultyField">Faculty member (optional)</label>
-            <input id="facultyField" maxlength="160" placeholder="Faculty name" class="feedback-meta">
-            <label for="feedbackText">Your feedback</label>
+            <label for="facultyEmailField">Teacher's college email (optional)</label>
+            <input id="facultyEmailField" type="email" maxlength="254" autocomplete="off" placeholder="teacher@college.edu" class="feedback-meta">
+            <p class="field-hint">No password is needed to analyze comments you provide. This email labels the teacher only; it does not access an inbox or reveal stored feedback.</p>
+            <label for="feedbackText">Student feedback comments</label>
             <textarea
                 id="feedbackText"
-                maxlength="5000"
-                placeholder="Example: The explanations are clear, but the lectures move quickly. More practical problems would help."
+                maxlength="20000"
+                placeholder="Paste one student comment per line. Example:
+The explanations are clear and helpful.
+The lectures move too quickly. More practical problems would help."
                 style="
                     width:100%;
                     min-height:180px;
@@ -134,13 +137,14 @@
 
             </button>
 
-            <p class="privacy-note">Anonymous by design: no student identity is requested or stored.</p>
+            <p class="privacy-note">Anonymous by design: student names and email addresses are not requested or stored. Comments you submit are grouped under the teacher email, if provided.</p>
             <button id="submitButton" class="primary-btn" style="margin-top:12px;" onclick="submitFeedback()">Submit feedback</button>
 
 
             <!-- ================= RESULT ================= -->
 
             <div id="analysisResult"
+                 aria-live="polite"
                  style="margin-top:30px;">
 
             </div>
@@ -196,8 +200,7 @@
                     <span>3️⃣</span>
 
                     <p>
-                        The system analyzes positive
-                        and negative language.
+                        The system groups comments by sentiment and teaching aspect.
                     </p>
 
                 </div>
@@ -207,8 +210,7 @@
                     <span>4️⃣</span>
 
                     <p>
-                        The predicted sentiment is
-                        displayed to the user.
+                        See the combined summary and evidence for each comment.
                     </p>
 
                 </div>
