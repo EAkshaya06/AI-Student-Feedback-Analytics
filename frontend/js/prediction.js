@@ -31,7 +31,7 @@ async function loadPredictions() {
 
         const response =
             await fetch(
-                "/api/feedback"
+                "/api/public-dataset"
             );
 
 
