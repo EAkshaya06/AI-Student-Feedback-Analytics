@@ -48,6 +48,15 @@ users = Table(
     Column("faculty_key", String(160), nullable=True),
     Column("active", Boolean, nullable=False, default=True),
 )
+teacher_login_tokens = Table(
+    "teacher_login_tokens", metadata,
+    Column("token_hash", String(64), primary_key=True),
+    Column("user_id", Integer, nullable=False, index=True),
+    Column("created_at", String(64), nullable=False),
+    Column("expires_at", String(64), nullable=False),
+    Column("used_at", String(64), nullable=True),
+)
+
 metadata.create_all(engine)
 
 def fetch_submissions(faculty_key=None):
