@@ -129,6 +129,12 @@ def load_data():
         print("Loading:", FINAL_FILE)
         return pd.read_csv(FINAL_FILE)
 
+    # Deployment packages the public historical dataset with frontend assets.
+    packaged_final = os.path.join(FRONTEND_DIR, "data", "final_feedback_analysis.csv")
+    if os.path.exists(packaged_final):
+        print("Loading:", packaged_final)
+        return pd.read_csv(packaged_final)
+
     # Otherwise use emotion analysis
     if os.path.exists(EMOTION_FILE):
         print("Loading:", EMOTION_FILE)
