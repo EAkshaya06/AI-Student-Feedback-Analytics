@@ -4,13 +4,18 @@ import pandas as pd
 import os
 import json
 import re
+import hashlib
+import secrets
+import smtplib
+import ssl
+from email.message import EmailMessage
 from functools import wraps
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from werkzeug.security import check_password_hash, generate_password_hash
 try:
-    from backend.storage import engine, submissions, users, fetch_submissions
+    from backend.storage import engine, submissions, users, teacher_login_tokens, fetch_submissions
 except ModuleNotFoundError:
-    from storage import engine, submissions, users, fetch_submissions
+    from storage import engine, submissions, users, teacher_login_tokens, fetch_submissions
 try:
     from backend.services.aspect_analysis import analyze as analyze_text
 except ModuleNotFoundError:
@@ -333,6 +338,14 @@ def login_page():
         return redirect(url_for("insights_page"))
     return send_from_directory(FRONTEND_DIR, "login.html")
 
+@app.route("/teacher-login")
+def teacher_login_page():
+    user = current_user()
+    if user:
+        return redirect(url_for("insights_page"))
+    return send_from_directory(FRONTEND_DIR, "teacher-login.html")
+
+
 @app.route("/api/auth/login", methods=["POST"])
 def login():
     from sqlalchemy import select
@@ -351,6 +364,138 @@ def login():
     session.permanent = True
     session["user_id"] = user["id"]
     return jsonify({"success":True,"user":{"name":user["display_name"],"role":user["role"]}})
+
+def _send_teacher_signin_email(address, signin_url):
+    host = os.environ.get("SMTP_HOST", "").strip()
+    sender = os.environ.get("SMTP_FROM", "").strip()
+    if not host or not sender:
+        raise RuntimeError("SMTP_HOST and SMTP_FROM must be configured.")
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    username = os.environ.get("SMTP_USER", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "")
+    message = EmailMessage()
+    message["Subject"] = "Your teacher sign-in link"
+    message["From"] = sender
+    message["To"] = address
+    message.set_content(
+        "Use this one-time link to sign in to Teacher Feedback Intelligence. "
+        "It expires in 10 minutes and can only be used once.\n\n"
+        + signin_url
+        + "\n\nIf you did not request this link, you can ignore this email."
+    )
+    if port == 465:
+        with smtplib.SMTP_SSL(host, port, context=ssl.create_default_context(), timeout=15) as mail:
+            if username:
+                mail.login(username, password)
+            mail.send_message(message)
+    else:
+        with smtplib.SMTP(host, port, timeout=15) as mail:
+            mail.ehlo()
+            mail.starttls(context=ssl.create_default_context())
+            mail.ehlo()
+            if username:
+                mail.login(username, password)
+            mail.send_message(message)
+
+
+@app.route("/api/auth/teacher-link", methods=["POST"])
+def request_teacher_signin_link():
+    from sqlalchemy import delete, insert, select
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "message": "Enter a valid university email address."}), 400
+    email = str(data.get("email", "")).strip().lower()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email) or len(email) > 254:
+        return jsonify({"success": False, "message": "Enter a valid university email address."}), 400
+    if not os.environ.get("SMTP_HOST") or not os.environ.get("SMTP_FROM"):
+        return jsonify({"success": False, "message": "Passwordless email sign-in is not configured yet. Ask the administrator to configure the mail settings."}), 503
+
+    now = datetime.now(timezone.utc)
+    raw_token = None
+    with engine.begin() as connection:
+        user = connection.execute(select(users).where(
+            users.c.email == email,
+            users.c.role == "faculty",
+            users.c.active.is_(True)
+        )).mappings().first()
+        if user:
+            cooldown_after = (now - timedelta(seconds=60)).isoformat()
+            recently_sent = connection.execute(select(teacher_login_tokens.c.token_hash).where(
+                teacher_login_tokens.c.user_id == user["id"],
+                teacher_login_tokens.c.created_at >= cooldown_after
+            )).first()
+            if not recently_sent:
+                raw_token = secrets.token_urlsafe(32)
+                token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+                connection.execute(delete(teacher_login_tokens).where(
+                    teacher_login_tokens.c.user_id == user["id"]
+                ))
+                connection.execute(insert(teacher_login_tokens).values(
+                    token_hash=token_hash,
+                    user_id=user["id"],
+                    created_at=now.isoformat(),
+                    expires_at=(now + timedelta(minutes=10)).isoformat(),
+                    used_at=None
+                ))
+
+    if raw_token:
+        base_url = os.environ.get("PUBLIC_BASE_URL", request.url_root).rstrip("/")
+        signin_url = base_url + "/teacher-login?token=" + raw_token
+        try:
+            _send_teacher_signin_email(email, signin_url)
+        except Exception:
+            app.logger.exception("Could not send passwordless teacher sign-in email")
+            token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+            from sqlalchemy import delete
+            with engine.begin() as connection:
+                connection.execute(delete(teacher_login_tokens).where(
+                    teacher_login_tokens.c.token_hash == token_hash
+                ))
+
+    return jsonify({
+        "success": True,
+        "message": "If a pre-registered faculty account uses that email, a sign-in link will be sent. Check the inbox; the link expires in 10 minutes."
+    })
+
+
+@app.route("/api/auth/teacher-link/verify", methods=["POST"])
+def verify_teacher_signin_link():
+    from sqlalchemy import select, update
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "") if isinstance(data, dict) else ""
+    if not isinstance(token, str) or len(token) > 200:
+        return jsonify({"success": False, "message": "This sign-in link is invalid or has expired."}), 400
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    now = datetime.now(timezone.utc)
+    with engine.begin() as connection:
+        link = connection.execute(select(teacher_login_tokens).where(
+            teacher_login_tokens.c.token_hash == token_hash,
+            teacher_login_tokens.c.used_at.is_(None)
+        )).mappings().first()
+        if not link:
+            return jsonify({"success": False, "message": "This sign-in link is invalid, expired, or already used."}), 401
+        if datetime.fromisoformat(link["expires_at"]) <= now:
+            return jsonify({"success": False, "message": "This sign-in link has expired. Request a new one."}), 401
+        user = connection.execute(select(users).where(
+            users.c.id == link["user_id"],
+            users.c.role == "faculty",
+            users.c.active.is_(True)
+        )).mappings().first()
+        if not user:
+            return jsonify({"success": False, "message": "This sign-in link is invalid or has expired."}), 401
+        changed = connection.execute(update(teacher_login_tokens).where(
+            teacher_login_tokens.c.token_hash == token_hash,
+            teacher_login_tokens.c.used_at.is_(None)
+        ).values(used_at=now.isoformat()))
+        if changed.rowcount != 1:
+            return jsonify({"success": False, "message": "This sign-in link has already been used."}), 401
+        user_id = user["id"]
+        display_name = user["display_name"]
+    session.clear()
+    session.permanent = True
+    session["user_id"] = user_id
+    return jsonify({"success": True, "user": {"name": display_name, "role": "faculty"}})
+
 
 @app.route("/api/auth/logout", methods=["POST"])
 def logout():
