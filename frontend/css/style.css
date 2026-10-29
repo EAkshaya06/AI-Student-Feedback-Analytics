@@ -1131,3 +1131,16 @@ footer { display:flex; justify-content:space-between; gap:20px; padding:23px cla
     .dashboard-container { padding:33px 18px 70px; }
     .dashboard-card { padding:19px; }
 }
+
+
+/* Batch teacher feedback report */
+.feedback-fields-hint,.field-hint { margin: 2px 0 14px; color:#64748b; font-size:13px; line-height:1.55; }
+.batch-counts { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+.batch-counts span { padding:6px 10px; border:1px solid #e3e9e2; border-radius:20px; background:#fff; color:#4e6156; font-size:12px; font-weight:600; }
+.report-teacher { margin:8px 0 14px; color:#536458; font-size:14px; }
+.batch-heading { margin-top:24px; }
+.batch-results { display:grid; gap:10px; margin-top:12px; }
+.batch-comment { padding:14px; border:1px solid #e2e9e0; border-radius:8px; background:#fff; }
+.batch-comment>div { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.batch-comment p { margin:9px 0; color:#35483f; overflow-wrap:anywhere; }
+.batch-comment small { color:#68758a; }
