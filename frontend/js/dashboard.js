@@ -515,15 +515,15 @@ async function loadFeedback() {
         }
 
 
-        // Show latest/sample 10 records
+        // Show every record in the historical dataset
 
         const records =
-            result.data.slice(0, 10);
+            result.data;
 
 
         let html = `
 
-            <div style="overflow-x:auto;">
+            <div style="overflow-x:auto; max-height:750px; overflow-y:auto;">
 
                 <table style="
                     width:100%;
@@ -652,7 +652,7 @@ async function loadFeedback() {
                 color:#64748b;
                 font-size:13px;
             ">
-                Showing 10 sample records from
+                Showing all records from
                 ${result.count} total feedback records.
             </p>
 
