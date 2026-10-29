@@ -531,22 +531,100 @@ def analytics():
 # API - ANALYZE NEW FEEDBACK
 # =========================================================
 
-@app.route(
-    "/api/analyze",
-    methods=["POST"]
-)
+def _feedback_comments(data):
+    raw_comments = data.get("comments")
+    if raw_comments is None:
+        raw_comments = [data.get("text", "")]
+    if isinstance(raw_comments, str):
+        raw_comments = raw_comments.splitlines()
+    if not isinstance(raw_comments, list):
+        return None, "Feedback comments must be a list of text entries."
+    comments = [item.strip() for item in raw_comments if isinstance(item, str) and item.strip()]
+    if not comments:
+        return None, "Please enter at least one student feedback comment."
+    if len(comments) > 25:
+        return None, "Please analyze up to 25 comments at a time."
+    if any(len(item) > 5000 for item in comments) or sum(map(len, comments)) > 20000:
+        return None, "Keep each comment under 5,000 characters and the total under 20,000 characters."
+    return comments, None
+
+
+def _analyze_feedback_batch(comments):
+    results = [analyze_text(comment) for comment in comments]
+    sentiment_counts = {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}
+    aspect_groups = {}
+    for result in results:
+        label = result.get("sentiment", "neutral")
+        sentiment_counts[label] = sentiment_counts.get(label, 0) + 1
+        for aspect in result.get("aspects", []):
+            group = aspect_groups.setdefault(aspect["aspect"], {
+                "labels": [], "evidence": [], "confidence": []
+            })
+            group["labels"].append(aspect.get("sentiment", "neutral"))
+            group["evidence"].extend(aspect.get("evidence", []))
+            group["confidence"].append(aspect.get("confidence", 0))
+    overall = (
+        "mixed" if sentiment_counts["mixed"] or (sentiment_counts["positive"] and sentiment_counts["negative"])
+        else "positive" if sentiment_counts["positive"]
+        else "negative" if sentiment_counts["negative"]
+        else "neutral"
+    )
+    aspects = []
+    for name, group in aspect_groups.items():
+        labels = group["labels"]
+        positive = labels.count("positive")
+        negative = labels.count("negative")
+        if "mixed" in labels or (positive and negative):
+            sentiment = "mixed"
+        elif "improvement" in labels:
+            sentiment = "improvement"
+        elif positive:
+            sentiment = "positive"
+        elif negative:
+            sentiment = "negative"
+        else:
+            sentiment = "neutral"
+        aspects.append({
+            "aspect": name,
+            "sentiment": sentiment,
+            "confidence": round(sum(group["confidence"]) / len(group["confidence"]), 2),
+            "evidence": list(dict.fromkeys(group["evidence"]))[:8],
+            "mentions": len(labels)
+        })
+    detailed_results = [
+        {"feedback": comment, **result}
+        for comment, result in zip(comments, results)
+    ]
+    return {
+        "sentiment": overall,
+        "confidence": round(sum(item.get("confidence", 0) for item in results) / len(results), 2),
+        "aspects": aspects,
+        "results": detailed_results,
+        "sentiment_counts": sentiment_counts,
+        "total": len(comments),
+        "strengths": sorted({aspect for item in results for aspect in item.get("strengths", [])}),
+        "improvements": sorted({aspect for item in results for aspect in item.get("improvements", [])}),
+        "suggestions": sorted({aspect for item in results for aspect in item.get("suggestions", [])}),
+        "concerns": sorted({aspect for item in results for aspect in item.get("concerns", [])}),
+        "method": "Aggregated explainable sentence and phrase rules"
+    }
+
+
+@app.route("/api/analyze", methods=["POST"])
 def analyze_feedback():
     data = request.get_json(silent=True) or {}
     if not isinstance(data, dict):
         return jsonify({"success": False, "message": "Feedback must be sent as a JSON object."}), 400
-    text = data.get("text", "")
-    if not isinstance(text, str) or not text.strip():
-        return jsonify({"success": False, "message": "Please enter feedback."}), 400
-    if len(text) > 5000:
-        return jsonify({"success": False, "message": "Feedback must be 5,000 characters or fewer."}), 400
-    result = analyze_text(text)
-    result.update({"success": True, "feedback": text})
+    comments, error = _feedback_comments(data)
+    if error:
+        return jsonify({"success": False, "message": error}), 400
+    teacher_email = str(data.get("teacher_email", "")).strip().lower()
+    if teacher_email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", teacher_email):
+        return jsonify({"success": False, "message": "Enter a valid teacher email address or leave it blank."}), 400
+    result = _analyze_feedback_batch(comments)
+    result.update({"success": True, "teacher_email": teacher_email})
     return jsonify(result)
+
 
 @app.route("/api/feedback", methods=["POST"])
 def submit_feedback():
@@ -554,21 +632,36 @@ def submit_feedback():
     data = request.get_json(silent=True) or {}
     if not isinstance(data, dict):
         return jsonify({"success": False, "message": "Feedback must be sent as a JSON object."}), 400
-    text = data.get("text", "")
-    if not isinstance(text, str) or not text.strip():
-        return jsonify({"success": False, "message": "Please enter feedback."}), 400
-    if len(text) > 5000:
-        return jsonify({"success": False, "message": "Feedback must be 5,000 characters or fewer."}), 400
-    analysis = analyze_text(text)
-    fields = [str(data.get(k, "")).strip()[:160] for k in ("department", "course", "faculty")]
-    # Identity fields are intentionally neither requested nor stored in this flow.
+    comments, error = _feedback_comments(data)
+    if error:
+        return jsonify({"success": False, "message": error}), 400
+    teacher_email = str(data.get("teacher_email", "")).strip().lower()
+    if teacher_email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", teacher_email):
+        return jsonify({"success": False, "message": "Enter a valid teacher email address or leave it blank."}), 400
+    fields = [str(data.get(k, "")).strip()[:160] for k in ("department", "course")]
+    faculty_name = str(data.get("faculty", "")).strip()[:160]
+    faculty_label = teacher_email or faculty_name
+    analyses = [analyze_text(comment) for comment in comments]
+    report = _analyze_feedback_batch(comments)
+    submission_ids = []
     with engine.begin() as connection:
-        result = connection.execute(insert(submissions).values(created_at=datetime.now(timezone.utc).isoformat(),
-            feedback_text=text.strip(), department=fields[0], course=fields[1], faculty=fields[2],
-            anonymous=True, analysis_json=json.dumps(analysis)))
-        submission_id = result.inserted_primary_key[0]
-    return jsonify({"success": True, "submission_id": submission_id, "analysis": analysis,
-        "message": "Thank you. Your feedback was stored without student identity."}), 201
+        for comment, analysis in zip(comments, analyses):
+            result = connection.execute(insert(submissions).values(
+                created_at=datetime.now(timezone.utc).isoformat(),
+                feedback_text=comment,
+                department=fields[0],
+                course=fields[1],
+                faculty=faculty_label,
+                anonymous=True,
+                analysis_json=json.dumps(analysis)
+            ))
+            submission_ids.append(result.inserted_primary_key[0])
+    return jsonify({
+        "success": True,
+        "submission_ids": submission_ids,
+        "analysis": report,
+        "message": f"Thank you. {len(comments)} comment(s) were stored without student identity."
+    }), 201
 
 @app.route("/api/insights")
 @require_roles("admin", "faculty")
