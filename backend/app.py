@@ -537,12 +537,12 @@ def public_dataset():
     """Read-only historical dataset for the public project dashboard."""
     df = normalize_data(load_data())
     if df.empty:
-        return jsonify({"success": True, "total": 0, "data": [], "sentiment": {}, "emotion": {}, "category": {}, "sentiment_by_category": {}})
+        return jsonify({"success": True, "total": 0, "count": 0, "data": [], "sentiment": {}, "emotion": {}, "category": {}, "sentiment_by_category": {}})
     sentiment = df["sentiment"].value_counts().to_dict()
     total = len(df)
     cross = pd.crosstab(df["category"], df["sentiment"]).fillna(0)
     return jsonify({
-        "success": True, "total": total,
+        "success": True, "total": total, "count": total,
         "positive": int(sentiment.get("positive", 0)),
         "neutral": int(sentiment.get("neutral", 0)),
         "negative": int(sentiment.get("negative", 0)),
