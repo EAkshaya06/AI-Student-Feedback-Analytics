@@ -108,6 +108,17 @@
             <label for="facultyEmailField">Teacher's college email (optional)</label>
             <input id="facultyEmailField" type="email" maxlength="254" autocomplete="off" placeholder="Optional teacher email" class="feedback-meta">
             <p class="field-hint">No account or teacher email is needed to analyze pasted comments. Add an email only if you want to label the teacher.</p>
+            <div class="feedback-file-import">
+                <label for="feedbackFile">Import comments from a file (optional)</label>
+                <input id="feedbackFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+                <p class="field-hint">CSV and TSV files can contain multiple columns; TXT files use one comment per line. Files are read in your browser. Review the comments below before previewing or submitting.</p>
+                <div id="feedbackColumnPicker" class="feedback-column-picker" hidden>
+                    <label class="feedback-header-choice"><input id="feedbackHasHeader" type="checkbox"> The first row contains column names</label>
+                    <label for="feedbackColumnSelect">Column with student comments</label>
+                    <select id="feedbackColumnSelect"></select>
+                </div>
+                <p id="fileImportStatus" class="file-import-status" role="status" aria-live="polite"></p>
+            </div>
             <label for="feedbackText">Student feedback comments</label>
             <textarea
                 id="feedbackText"

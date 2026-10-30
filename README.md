@@ -25,6 +25,8 @@ Before the first production deployment:
 4. Check `/api/health`; a successful deployment responds with `{"status":"ok","database":"connected",...}`. Open `/login` to sign into the staff dashboard. Students submit feedback at `/feedback`.
 5. Create each faculty account by signing in as admin and sending a `POST` request to `/api/admin/users` with a JSON body containing `email`, `name`, `faculty_key`, and a password of at least 12 characters. Students can preview or submit comments without a password. The teacher email entered on the form is only a label for those comments; it does not connect to a college inbox or retrieve existing feedback. Set a faculty account's `faculty_key` to the exact teacher email used on submissions that account should be scoped to. Staff reports remain behind staff sign-in. This initial version has no staff account management screen.
 
+The public `/feedback` form accepts pasted comments and CSV, TSV, or TXT imports. CSV/TSV imports let the student choose the column containing comments. Files are parsed in the browser; the source file and other columns are not uploaded. The form analyzes up to 25 comments per batch.
+
 Vercel Hobby is free and deployments can stay online without a 30-day trial expiry. It has monthly usage caps; exceeding them can pause the project until usage resets. Hobby is limited to personal, non-commercial use under Vercel's current terms, so confirm eligibility before using it as an official college service. Vercel also runs the Python app as serverless functions rather than an always-on server. The database is separate from Vercel and remains available subject to the database provider's free-plan limits and terms. Keep backups of submitted feedback.
 
 ## Security and privacy notes
