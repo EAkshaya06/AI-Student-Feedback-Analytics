@@ -10,7 +10,7 @@ function getFeedbackInput() {
         .split(/\r?\n/)
         .map(comment => comment.trim())
         .filter(Boolean);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid teacher email address.");
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid teacher email address, or leave it blank.");
     if (!comments.length) throw new Error("Paste at least one student comment, one per line.");
     if (comments.length > 25) throw new Error("Analyze up to 25 comments at a time.");
     if (comments.some(comment => comment.length > 5000) || comments.join("").length > 20000) {
@@ -45,7 +45,14 @@ function showAnalysis(data, submitted = false) {
         escapeHTML(item.sentiment) + "</span></div><p>" + escapeHTML(item.feedback) + "</p>" +
         ((item.aspects || []).length ? "<small>" + item.aspects.map(aspect =>
             escapeHTML(aspect.aspect) + ": " + escapeHTML(aspect.sentiment)
-        ).join(" · ") + "</small>" : "") + "</article>"
+        ).join(" · ") + "</small>" : "") +
+        "<p class='batch-review'><strong>Review:</strong> " + escapeHTML(item.review || "No specific review was available for this comment.") + "</p>" +
+        "<ul class='comment-guidance'>" + (item.improvement_suggestions || []).map(suggestion =>
+            "<li>" + escapeHTML(suggestion) + "</li>"
+        ).join("") + "</ul></article>"
+    ).join("");
+    const teacherSuggestions = (data.improvement_suggestions || []).map(suggestion =>
+        "<li>" + escapeHTML(suggestion) + "</li>"
     ).join("");
     const emailLine = data.teacher_email
         ? "<p class='report-teacher'>Teacher: " + escapeHTML(data.teacher_email) + " · " +
@@ -59,6 +66,11 @@ function showAnalysis(data, submitted = false) {
         emailLine +
         (data.confidence < .6 ? "<p class='low-confidence'>Analysis confidence is low. Review the original comments before drawing conclusions.</p>" : "") +
         summaryCounts +
+        "<div class='analysis-guidance'><article class='overall-review'><h3>Overall review</h3><p>" +
+        escapeHTML(data.review || "Review the original comments for context.") +
+        "</p></article><article class='teacher-guidance'><h3>What the teacher can improve</h3><ul>" +
+        (teacherSuggestions || "<li>Ask students for a specific example so the next step addresses a clear teaching aspect.</li>") +
+        "</ul></article></div>" +
         "<p>Method: " + escapeHTML(data.method || "Explainable phrase analysis") +
         ". Results are estimates, not a perfect understanding of every sentence.</p>" +
         "<h3>Teaching aspects</h3><div class='aspect-results'>" +

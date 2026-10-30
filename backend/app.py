@@ -17,9 +17,17 @@ try:
 except ModuleNotFoundError:
     from storage import engine, submissions, users, teacher_login_tokens, fetch_submissions
 try:
-    from backend.services.aspect_analysis import analyze as analyze_text
+    from backend.services.aspect_analysis import (
+        analyze as analyze_text,
+        review_summary,
+        teacher_improvement_suggestions,
+    )
 except ModuleNotFoundError:
-    from services.aspect_analysis import analyze as analyze_text
+    from services.aspect_analysis import (
+        analyze as analyze_text,
+        review_summary,
+        teacher_improvement_suggestions,
+    )
 
 app = Flask(__name__)
 IS_PRODUCTION = (os.environ.get("APP_ENV", "").lower() == "production"
@@ -775,6 +783,8 @@ def _analyze_feedback_batch(comments):
         "results": detailed_results,
         "sentiment_counts": sentiment_counts,
         "total": len(comments),
+        "review": review_summary(overall, aspects),
+        "improvement_suggestions": teacher_improvement_suggestions(aspects),
         "strengths": sorted({aspect for item in results for aspect in item.get("strengths", [])}),
         "improvements": sorted({aspect for item in results for aspect in item.get("improvements", [])}),
         "suggestions": sorted({aspect for item in results for aspect in item.get("suggestions", [])}),
