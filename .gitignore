@@ -2,11 +2,9 @@ __pycache__/
 *.py[cod]
 .venv/
 backend/.venv/
-backend/data/*.sqlite3
-backend/data/*.sqlite3-*
+backend/data/feedback_submissions.sqlite3
 .env
 backend/.env
+backend/data/*.csv
 backend/models/*.pkl
 .vercel/
-cloud-cost-optimization/
-live-update/

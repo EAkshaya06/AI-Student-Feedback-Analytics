@@ -1,173 +1,324 @@
-document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("feedbackForm").addEventListener("submit", submitFeedback);
-  document.getElementById("feedbackFile").addEventListener("change", importFeedbackFile);
-  document.getElementById("commentColumn").addEventListener("change", renderImportedColumn);
-});
+const escapeHTML = value => {
+    const node = document.createElement("span");
+    node.textContent = String(value ?? "");
+    return node.innerHTML;
+};
 
-let importedRows = null;
-let currentBatchId = "";
+const MAX_FEEDBACK_FILE_BYTES = 5 * 1024 * 1024;
+let importedDelimitedFile = null;
+
+function setFileImportStatus(message, isError = false) {
+    const status = document.getElementById("fileImportStatus");
+    status.textContent = message;
+    status.classList.toggle("error", isError);
+}
+
+function isFeedbackColumnHeader(value) {
+    const normalized = String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    return /^(student)?(feedback|comments?|reviews?|responses?|remarks?|text|answers?)(comments?|text)?$/.test(normalized);
+}
+
+async function readFeedbackFile(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+        return new TextDecoder("utf-16le").decode(bytes.subarray(2));
+    }
+    if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+        return new TextDecoder("utf-16be").decode(bytes.subarray(2));
+    }
+    return new TextDecoder("utf-8").decode(bytes).replace(/^\uFEFF/, "");
+}
+
+function detectFileDelimiter(text, extension) {
+    if (extension === "tsv") return "\t";
+    const firstLine = text.split(/\r?\n/, 1)[0] || "";
+    const counts = { ",": 0, ";": 0, "\t": 0 };
+    let insideQuotes = false;
+    for (let index = 0; index < firstLine.length; index += 1) {
+        const character = firstLine[index];
+        if (character === '"') {
+            if (insideQuotes && firstLine[index + 1] === '"') index += 1;
+            else insideQuotes = !insideQuotes;
+        } else if (!insideQuotes && Object.prototype.hasOwnProperty.call(counts, character)) {
+            counts[character] += 1;
+        }
+    }
+    return Object.entries(counts).sort((left, right) => right[1] - left[1])[0][0];
+}
+
+function parseDelimitedFeedback(text, delimiter) {
+    const rows = [];
+    let row = [];
+    let field = "";
+    let insideQuotes = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+        const character = text[index];
+        if (character === '"') {
+            if (insideQuotes && text[index + 1] === '"') {
+                field += '"';
+                index += 1;
+            } else {
+                insideQuotes = !insideQuotes;
+            }
+        } else if (character === delimiter && !insideQuotes) {
+            row.push(field);
+            field = "";
+        } else if ((character === "\n" || character === "\r") && !insideQuotes) {
+            row.push(field);
+            if (row.some(cell => cell.trim())) rows.push(row);
+            row = [];
+            field = "";
+            if (character === "\r" && text[index + 1] === "\n") index += 1;
+        } else {
+            field += character;
+        }
+    }
+
+    if (insideQuotes) throw new Error("A quoted cell is not closed. Check the CSV or TSV file format.");
+    row.push(field);
+    if (row.some(cell => cell.trim())) rows.push(row);
+    return rows;
+}
+
+function validateImportedComments(comments) {
+    if (!comments.length) throw new Error("No comments were found in the selected file column.");
+    if (comments.length > 25) throw new Error(`This form accepts up to 25 comments; the file has ${comments.length}. Split the file into batches or paste up to 25 comments at a time.`);
+    if (comments.some(comment => comment.length > 5000) || comments.join("").length > 20000) {
+        throw new Error("Keep each comment under 5,000 characters and the total under 20,000 characters.");
+    }
+}
+
+function replaceFeedbackComments(comments, fileName) {
+    validateImportedComments(comments);
+    document.getElementById("feedbackText").value = comments.join("\n");
+    setFileImportStatus(`Loaded ${comments.length} comment(s) from ${fileName}. Review or edit them below before continuing.`);
+}
+
+function rebuildFeedbackColumnPicker(preferredColumn = null) {
+    if (!importedDelimitedFile) return;
+    const { rows } = importedDelimitedFile;
+    const width = rows.reduce((maximum, row) => Math.max(maximum, row.length), 0);
+    const hasHeader = document.getElementById("feedbackHasHeader").checked;
+    const headers = hasHeader ? rows[0] : [];
+    const select = document.getElementById("feedbackColumnSelect");
+    select.replaceChildren();
+
+    for (let column = 0; column < width; column += 1) {
+        const option = document.createElement("option");
+        option.value = String(column);
+        option.textContent = hasHeader && headers[column]?.trim()
+            ? headers[column].trim()
+            : `Column ${column + 1}`;
+        select.appendChild(option);
+    }
+
+    const headerColumn = hasHeader
+        ? headers.findIndex(isFeedbackColumnHeader)
+        : -1;
+    const selectedColumn = preferredColumn === null
+        ? (headerColumn >= 0 ? headerColumn : 0)
+        : Math.min(preferredColumn, width - 1);
+    select.value = String(selectedColumn);
+}
+
+function applyImportedFeedbackColumn() {
+    if (!importedDelimitedFile) return;
+    try {
+        const hasHeader = document.getElementById("feedbackHasHeader").checked;
+        const column = Number(document.getElementById("feedbackColumnSelect").value);
+        const dataRows = hasHeader ? importedDelimitedFile.rows.slice(1) : importedDelimitedFile.rows;
+        const comments = dataRows
+            .map(row => String(row[column] ?? "").replace(/\r\n?/g, "\n").replace(/\n+/g, " ").trim())
+            .filter(Boolean);
+        replaceFeedbackComments(comments, importedDelimitedFile.fileName);
+    } catch (error) {
+        setFileImportStatus(error.message, true);
+    }
+}
 
 async function importFeedbackFile(event) {
-  const file = event.target.files?.[0];
-  const message = document.getElementById("fileMessage");
-  const picker = document.getElementById("columnPickerWrap");
-  importedRows = null;
-  picker.hidden = true;
-  if (!file) return;
-  if (file.size > 900_000) {
-    showFormMessage(message, "Choose a file smaller than 900 KB.", true);
-    event.target.value = "";
-    return;
-  }
-  try {
-    const contents = (await file.text()).replace(/^\uFEFF/, "");
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
     const extension = file.name.split(".").pop().toLowerCase();
-    if (extension === "txt") {
-      const comments = contents.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-      document.getElementById("feedbackText").value = comments.join("\n");
-      showFormMessage(message, `${comments.length} comment${comments.length === 1 ? "" : "s"} loaded from the text file.`, false);
-      return;
+    const picker = document.getElementById("feedbackColumnPicker");
+    importedDelimitedFile = null;
+    picker.hidden = true;
+
+    if (!["csv", "tsv", "txt"].includes(extension)) {
+        setFileImportStatus("Choose a CSV, TSV, or TXT file.", true);
+        return;
     }
-    if (extension !== "csv" && extension !== "tsv") throw new Error("Choose a CSV, TSV, or TXT file.");
-    const delimiter = extension === "tsv" ? "\t" : ",";
-    const rows = parseDelimited(contents, delimiter);
-    if (rows.length < 2 || !rows[0].some((value) => value.trim())) throw new Error("The file needs a header row and at least one comment row.");
-    importedRows = rows;
-    const selector = document.getElementById("commentColumn");
-    selector.replaceChildren();
-    rows[0].forEach((heading, index) => {
-      const option = document.createElement("option");
-      option.value = String(index);
-      option.textContent = heading.trim() || `Column ${index + 1}`;
-      selector.append(option);
-    });
-    picker.hidden = false;
-    renderImportedColumn();
-  } catch (error) {
-    showFormMessage(message, error.message || "The selected file could not be read.", true);
-    event.target.value = "";
-  }
-}
-
-function parseDelimited(text, delimiter) {
-  const rows = [];
-  let row = [];
-  let cell = "";
-  let quoted = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index];
-    if (character === '"') {
-      if (quoted && text[index + 1] === '"') {
-        cell += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (!quoted && character === delimiter) {
-      row.push(cell);
-      cell = "";
-    } else if (!quoted && (character === "\n" || character === "\r")) {
-      if (character === "\r" && text[index + 1] === "\n") index += 1;
-      row.push(cell);
-      if (row.some((value) => value.trim())) rows.push(row);
-      row = [];
-      cell = "";
-    } else {
-      cell += character;
+    if (file.size > MAX_FEEDBACK_FILE_BYTES) {
+        setFileImportStatus("Choose a file smaller than 5 MB.", true);
+        return;
     }
-  }
-  row.push(cell);
-  if (row.some((value) => value.trim())) rows.push(row);
-  if (quoted) throw new Error("The file has an unclosed quoted field.");
-  return rows;
+
+    setFileImportStatus("Reading the file in your browser…");
+    try {
+        const text = await readFeedbackFile(file);
+        if (extension === "txt") {
+            const comments = text.split(/\r\n?|\n/).map(comment => comment.trim()).filter(Boolean);
+            replaceFeedbackComments(comments, file.name);
+            return;
+        }
+
+        const rows = parseDelimitedFeedback(text, detectFileDelimiter(text, extension));
+        if (!rows.length) throw new Error("No rows were found in this file.");
+        const hasHeader = rows[0].some(isFeedbackColumnHeader);
+        importedDelimitedFile = { rows, fileName: file.name };
+        document.getElementById("feedbackHasHeader").checked = hasHeader;
+        picker.hidden = false;
+        rebuildFeedbackColumnPicker();
+        applyImportedFeedbackColumn();
+    } catch (error) {
+        setFileImportStatus(error.message || "Could not read this file.", true);
+    }
 }
 
-function renderImportedColumn() {
-  if (!importedRows) return;
-  const column = Number(document.getElementById("commentColumn").value || 0);
-  const comments = importedRows.slice(1).map((row) => String(row[column] || "").trim()).filter(Boolean);
-  document.getElementById("feedbackText").value = comments.join("\n");
-  showFormMessage(document.getElementById("fileMessage"), `${comments.length} comments loaded from the selected column. The file itself will not be uploaded.`, false);
-}
-
-async function submitFeedback(event) {
-  event.preventDefault();
-  const result = document.getElementById("analysisResult");
-  const button = document.getElementById("submitFeedbackButton");
-  const comments = document.getElementById("feedbackText").value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (!comments.length) return showFormMessage(result, "Add at least one feedback comment.", true);
-  if (comments.length > 100) return showFormMessage(result, "Submit up to 100 comments at a time.", true);
-  if (comments.some((comment) => comment.length > 20_000)) return showFormMessage(result, "Each comment must be 20,000 characters or fewer.", true);
-  if (!currentBatchId) currentBatchId = makeBatchId();
-
-  button.disabled = true;
-  button.textContent = "Saving feedback…";
-  result.innerHTML = '<div class="loading">Saving your feedback…</div>';
-  const metadata = {
-    department: document.getElementById("department").value.trim(),
-    academic_year: document.getElementById("academicYear").value.trim(),
-    semester: document.getElementById("semester").value.trim(),
-    subject: document.getElementById("subject").value.trim(),
-    section: document.getElementById("section").value.trim(),
-    faculty: document.getElementById("faculty").value.trim(),
-  };
-  try {
-    const response = await apiRequest("/api/feedback", {
-      method: "POST",
-      body: { batch_id: currentBatchId, comments, metadata },
+document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("feedbackFile")?.addEventListener("change", importFeedbackFile);
+    document.getElementById("feedbackHasHeader")?.addEventListener("change", () => {
+        rebuildFeedbackColumnPicker();
+        applyImportedFeedbackColumn();
     });
-    const data = await response.json();
-    if (!response.ok || !data.success) throw new Error(data.message || "Feedback could not be submitted.");
-    renderSubmission(result, data);
-    document.getElementById("feedbackForm").reset();
-    document.getElementById("columnPickerWrap").hidden = true;
-    importedRows = null;
-    currentBatchId = "";
-  } catch (error) {
-    showFormMessage(result, error.message || "Could not save feedback. Check your connection and try again.", true);
-  } finally {
-    button.disabled = false;
-    button.textContent = "Submit feedback";
-  }
+    document.getElementById("feedbackColumnSelect")?.addEventListener("change", applyImportedFeedbackColumn);
+});
+
+function getFeedbackInput() {
+    const email = document.getElementById("facultyEmailField").value.trim().toLowerCase();
+    const comments = document.getElementById("feedbackText").value
+        .split(/\r?\n/)
+        .map(comment => comment.trim())
+        .filter(Boolean);
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid teacher email address, or leave it blank.");
+    if (!comments.length) throw new Error("Paste at least one student comment, one per line.");
+    if (comments.length > 25) throw new Error("Analyze up to 25 comments at a time.");
+    if (comments.some(comment => comment.length > 5000) || comments.join("").length > 20000) {
+        throw new Error("Keep each comment under 5,000 characters and the total under 20,000 characters.");
+    }
+    return {
+        teacher_email: email || "",
+        comments,
+        department: document.getElementById("departmentField").value.trim(),
+        course: document.getElementById("courseField").value.trim()
+    };
 }
 
-function renderSubmission(target, data) {
-  const rows = (data.results || []).map((item) => {
-    const aspects = (item.aspects || []).map((aspect) => `
-      <li><span><strong>${escapeHTML(aspect.aspect)}</strong> · ${escapeHTML(aspect.sentiment)}</span><small>Evidence: ${escapeHTML(aspect.evidence)}</small></li>`).join("");
-    const sentimentLabel = item.language_supported
-      ? `${item.mixed_opinion ? "Mixed opinion · " : ""}${escapeHTML(item.sentiment)}`
-      : "Not analyzed";
-    const languageNote = item.language_supported
-      ? escapeHTML(item.analysis_note)
-      : `${escapeHTML(item.language)} feedback: ${escapeHTML(item.analysis_note)}`;
-    return `
-      <article class="comment-result">
-        <div class="comment-result-meta"><span class="sentiment-pill ${item.language_supported ? escapeHTML(item.sentiment) : "unsupported"}">${sentimentLabel}</span><span>${escapeHTML(item.language)} · ${escapeHTML(item.analysis_method)}</span></div>
-        <p>${escapeHTML(item.feedback)}</p>
-        ${aspects ? `<ul class="aspect-evidence-list">${aspects}</ul>` : ""}
-        <p class="comment-insight">${languageNote}</p>
-      </article>`;
-  }).join("");
-  target.innerHTML = `
-    <section class="report-card submission-report">
-      <div class="submission-success"><span aria-hidden="true">✓</span><div><h2>Feedback saved</h2><p>${Number(data.count) || 0} comment${Number(data.count) === 1 ? "" : "s"} added to live student submissions. Unsupported language is excluded from sentiment totals.</p></div></div>
-      <p class="report-footnote">Your submission does not include a name or email. Sentiment scores are rule-based estimates, not probabilities.</p>
-      <div class="comment-results">${rows}</div>
-      <p class="staff-link-note"><a href="/login">Staff sign in</a> is required to view dashboard summaries.</p>
-    </section>`;
-  target.scrollIntoView({ behavior: "smooth", block: "start" });
+function showAnalysis(data, submitted = false) {
+    const aspects = (data.aspects || []).map(item =>
+        "<article class='aspect-result'><div><strong>" + escapeHTML(item.aspect) +
+        "</strong><span class='sentiment-pill " + escapeHTML(item.sentiment) + "'>" +
+        escapeHTML(item.sentiment) + "</span></div><p>" +
+        (item.evidence || []).map(escapeHTML).join(" · ") +
+        "</p><small>" + (item.mentions ? item.mentions + " comment(s) · " : "") +
+        "Confidence " + Math.round((item.confidence || 0) * 100) + "%</small></article>"
+    ).join("");
+    const counts = data.sentiment_counts || {};
+    const summaryCounts = "<div class='batch-counts'>" +
+        "<span>" + (counts.positive || 0) + " positive</span>" +
+        "<span>" + (counts.neutral || 0) + " neutral</span>" +
+        "<span>" + (counts.negative || 0) + " negative</span>" +
+        "<span>" + (counts.mixed || 0) + " mixed</span></div>";
+    const commentResults = (data.results || []).map((item, index) =>
+        "<article class='batch-comment'><div><strong>Comment " + (index + 1) +
+        "</strong><span class='sentiment-pill " + escapeHTML(item.sentiment) + "'>" +
+        escapeHTML(item.sentiment) + "</span></div><p>" + escapeHTML(item.feedback) + "</p>" +
+        ((item.aspects || []).length ? "<small>" + item.aspects.map(aspect =>
+            escapeHTML(aspect.aspect) + ": " + escapeHTML(aspect.sentiment)
+        ).join(" · ") + "</small>" : "") +
+        "<p class='batch-review'><strong>Review:</strong> " + escapeHTML(item.review || "No specific review was available for this comment.") + "</p>" +
+        "<ul class='comment-guidance'>" + (item.improvement_suggestions || []).map(suggestion =>
+            "<li>" + escapeHTML(suggestion) + "</li>"
+        ).join("") + "</ul></article>"
+    ).join("");
+    const teacherSuggestions = (data.improvement_suggestions || []).map(suggestion =>
+        "<li>" + escapeHTML(suggestion) + "</li>"
+    ).join("");
+    const emailLine = data.teacher_email
+        ? "<p class='report-teacher'>Teacher: " + escapeHTML(data.teacher_email) + " · " +
+          (data.total || 0) + " student comment(s)</p>"
+        : "";
+    document.getElementById("analysisResult").innerHTML =
+        "<section class='analysis-summary'><span class='eyebrow'>" +
+        (submitted ? "Feedback received" : "Evidence-based analysis") +
+        "</span><h2>" + escapeHTML(data.sentiment) + " overall <span class='confidence'>" +
+        Math.round((data.confidence || 0) * 100) + "% confidence</span></h2>" +
+        emailLine +
+        (data.confidence < .6 ? "<p class='low-confidence'>Analysis confidence is low. Review the original comments before drawing conclusions.</p>" : "") +
+        summaryCounts +
+        "<div class='analysis-guidance'><article class='overall-review'><h3>Overall review</h3><p>" +
+        escapeHTML(data.review || "Review the original comments for context.") +
+        "</p></article><article class='teacher-guidance'><h3>What the teacher can improve</h3><ul>" +
+        (teacherSuggestions || "<li>Ask students for a specific example so the next step addresses a clear teaching aspect.</li>") +
+        "</ul></article></div>" +
+        "<p>Method: " + escapeHTML(data.method || "Explainable phrase analysis") +
+        ". Results are estimates, not a perfect understanding of every sentence.</p>" +
+        "<h3>Teaching aspects</h3><div class='aspect-results'>" +
+        (aspects || "<p>No configured teaching aspect matched these comments.</p>") +
+        "</div>" +
+        (commentResults ? "<h3 class='batch-heading'>Comment-by-comment results</h3><div class='batch-results'>" +
+            commentResults + "</div>" : "") +
+        (submitted ? "<p class='success-note'>" + escapeHTML(data.message) + "</p>" : "") +
+        "</section>";
 }
 
-function showFormMessage(target, message, isError) {
-  target.textContent = message;
-  target.className = `form-message${isError ? " error" : ""}`;
+async function analyzeFeedback() {
+    let payload;
+    try {
+        payload = getFeedbackInput();
+    } catch (error) {
+        document.getElementById("analysisResult").textContent = error.message;
+        return;
+    }
+    const button = document.getElementById("analyzeButton");
+    button.disabled = true;
+    button.textContent = "Analyzing…";
+    try {
+        const response = await fetch("/api/analyze", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || "Analysis failed.");
+        showAnalysis(data);
+    } catch (error) {
+        document.getElementById("analysisResult").textContent = error.message;
+    } finally {
+        button.disabled = false;
+        button.textContent = "Analyze comments";
+    }
 }
 
-function makeBatchId() {
-  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
-    const random = Math.floor(Math.random() * 16);
-    return (character === "x" ? random : (random & 3) | 8).toString(16);
-  });
+async function submitFeedback() {
+    let payload;
+    try {
+        payload = getFeedbackInput();
+    } catch (error) {
+        document.getElementById("analysisResult").textContent = error.message;
+        return;
+    }
+    const button = document.getElementById("submitButton");
+    button.disabled = true;
+    button.textContent = "Submitting…";
+    try {
+        const response = await fetch("/api/feedback", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({...payload, anonymous: true})
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || "Submission failed.");
+        showAnalysis({
+            ...data.analysis,
+            teacher_email: payload.teacher_email,
+            message: data.message
+        }, true);
+    } catch (error) {
+        document.getElementById("analysisResult").textContent = error.message;
+    } finally {
+        button.disabled = false;
+        button.textContent = "Submit feedback";
+    }
 }

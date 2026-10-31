@@ -23,7 +23,7 @@ async function loadAnalytics() {
 
         const response =
             await fetch(
-                apiUrl("/api/analytics")
+                "/api/public-dataset"
             );
 
 

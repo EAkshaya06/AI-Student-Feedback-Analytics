@@ -1,57 +1,241 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Submit Student Feedback | AI Feedback Analytics</title>
-  <link rel="stylesheet" href="./css/style.css">
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Share your experience · Teacher Feedback Intelligence</title>
+
+    <link rel="stylesheet"
+          href="/css/style.css">
+
 </head>
+
 <body>
-  <header class="navbar">
-    <div class="nav-container">
-      <a class="logo" href="/"><span class="logo-mark" aria-hidden="true">✳</span>AI Feedback Analytics</a>
-      <nav class="nav-links" aria-label="Main navigation">
-        <a href="/">Home</a><a href="/feedback" class="active">Submit Feedback</a><a href="/login">Staff sign in</a>
-      </nav>
-    </div>
-  </header>
-  <main class="dashboard-container">
-    <div class="dashboard-header">
-      <div><span class="eyebrow">STUDENT VOICE</span><h1>Submit course feedback</h1><p>Your name and email are not requested. Add academic details only if you want to.</p></div>
-    </div>
 
-    <form id="feedbackForm" class="dashboard-card feedback-form-card">
-      <div class="card-header"><div><h2>Academic context <span class="optional-tag">Optional</span></h2><p>These fields help staff compare feedback across courses and terms.</p></div></div>
-      <div class="feedback-fields academic-fields">
-        <div><label for="department">Department</label><input id="department" maxlength="120" autocomplete="off" placeholder="e.g. Computer Science"></div>
-        <div><label for="academicYear">Academic year</label><input id="academicYear" maxlength="32" autocomplete="off" placeholder="e.g. 2025–26"></div>
-        <div><label for="semester">Semester</label><input id="semester" maxlength="32" autocomplete="off" placeholder="e.g. Semester 3"></div>
-        <div><label for="subject">Subject</label><input id="subject" maxlength="160" autocomplete="off" placeholder="e.g. Data Structures"></div>
-        <div><label for="section">Section</label><input id="section" maxlength="80" autocomplete="off" placeholder="e.g. CSE-A"></div>
-        <div><label for="faculty">Faculty / teacher</label><input id="faculty" maxlength="160" autocomplete="off" placeholder="Optional"></div>
-      </div>
+    <!-- ================= NAVBAR ================= -->
 
-      <div class="feedback-fields comments-fields">
-        <label for="feedbackText">Feedback comments</label>
-        <textarea id="feedbackText" maxlength="1000000" placeholder="Write one comment per line. English, Hindi, or Telugu feedback is accepted." required></textarea>
-        <p class="field-hint">Up to 100 comments per submission, with a maximum of 20,000 characters per comment. Please avoid including names or other identifying details in the comment.</p>
-        <label for="feedbackFile">Import comments from CSV, TSV, or TXT</label>
-        <input id="feedbackFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
-        <div id="columnPickerWrap" class="column-picker" hidden>
-          <label for="commentColumn">Choose the column containing comments</label>
-          <select id="commentColumn"></select>
+    <header class="navbar">
+
+        <div class="nav-container">
+
+            <div class="logo">
+                Teacher Feedback Intelligence
+            </div>
+
+            <nav class="nav-links">
+
+                <a href="/">
+                    Home
+                </a>
+
+                <a href="/dashboard">
+                    Dashboard
+                </a>
+
+                <a href="/insights">AI Insight Center</a>
+
+                <a href="/feedback"
+                   class="active">
+                    Analyze Feedback
+                </a>
+<a href="/teacher-login">Staff sign in</a>
+
+                <a href="/analysis">
+                    Analytics
+                </a>
+
+                <a href="/predictions">
+                    Predictions
+                </a>
+
+            </nav>
+
         </div>
-        <p id="fileMessage" class="field-hint" aria-live="polite">The file is read in this browser. Only the selected comment text is submitted.</p>
-      </div>
-      <button id="submitFeedbackButton" class="primary-btn" type="submit">Submit feedback</button>
-      <div id="analysisResult" class="analysis-result" role="status" aria-live="polite"></div>
-    </form>
-    <section class="dashboard-card feedback-howto">
-      <h2>Privacy and analysis</h2>
-      <p>The form does not ask for a student name or email. Submitted comments are stored for staff analytics; authorized faculty can only see submissions assigned to their account. Automated sentiment and aspect labels are estimates, and Telugu/Hindi phrase coverage is limited.</p>
-    </section>
-  </main>
-  <script src="./js/api.js"></script>
-  <script src="./js/feedback.js"></script>
+
+    </header>
+
+
+    <!-- ================= MAIN ================= -->
+
+    <main class="dashboard-container">
+
+        <div class="dashboard-header">
+
+            <div>
+
+                    <h1>Analyze teacher feedback</h1>
+
+                <p>
+                    Enter comments from students about a teacher to see an aspect-by-aspect summary.
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <!-- ================= INPUT CARD ================= -->
+
+        <section class="dashboard-card"
+                 style="max-width:900px; margin:auto;">
+
+            <div class="card-header">
+
+                <div>
+
+                    <h3>
+                        📝 Tell us what happened
+                    </h3>
+
+                    <p>
+                        Paste comments from students. Each non-empty line is analyzed as one comment.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <label for="departmentField">Department (optional)</label>
+            <input id="departmentField" maxlength="160" placeholder="e.g. Computer Science" class="feedback-meta">
+            <label for="courseField">Course (optional)</label>
+            <input id="courseField" maxlength="160" placeholder="e.g. Machine Learning" class="feedback-meta">
+            <label for="facultyEmailField">Teacher's college email (optional)</label>
+            <input id="facultyEmailField" type="email" maxlength="254" autocomplete="off" placeholder="Optional teacher email" class="feedback-meta">
+            <p class="field-hint">No account or teacher email is needed to analyze pasted comments. Add an email only if you want to label the teacher.</p>
+            <div class="feedback-file-import">
+                <label for="feedbackFile">Import comments from a file (optional)</label>
+                <input id="feedbackFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+                <p class="field-hint">CSV and TSV files can contain multiple columns; TXT files use one comment per line. Files are read in your browser. Review the comments below before previewing or submitting.</p>
+                <div id="feedbackColumnPicker" class="feedback-column-picker" hidden>
+                    <label class="feedback-header-choice"><input id="feedbackHasHeader" type="checkbox"> The first row contains column names</label>
+                    <label for="feedbackColumnSelect">Column with student comments</label>
+                    <select id="feedbackColumnSelect"></select>
+                </div>
+                <p id="fileImportStatus" class="file-import-status" role="status" aria-live="polite"></p>
+            </div>
+            <label for="feedbackText">Student feedback comments</label>
+            <textarea
+                id="feedbackText"
+                maxlength="20000"
+                placeholder="Paste one student comment per line. Example:
+The explanations are clear and helpful.
+The lectures move too quickly. More practical problems would help."
+                style="
+                    width:100%;
+                    min-height:180px;
+                    padding:15px;
+                    border:1px solid #dbe2ea;
+                    border-radius:10px;
+                    resize:vertical;
+                    font-size:15px;
+                    font-family:inherit;
+                    box-sizing:border-box;
+                "></textarea>
+
+
+            <button
+                id="analyzeButton"
+                class="primary-btn"
+                style="margin-top:20px;"
+                onclick="analyzeFeedback()">
+
+                Preview analysis
+
+            </button>
+
+            <p class="privacy-note">Anonymous by design: student names and email addresses are not requested or stored. Teacher email is optional; student names and emails are not collected.</p>
+            <button id="submitButton" class="primary-btn" style="margin-top:12px;" onclick="submitFeedback()">Submit feedback</button>
+
+
+            <!-- ================= RESULT ================= -->
+
+            <div id="analysisResult"
+                 aria-live="polite"
+                 style="margin-top:30px;">
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= EXPLANATION ================= -->
+
+        <section class="dashboard-card"
+                 style="
+                    max-width:900px;
+                    margin:25px auto 0;
+                 ">
+
+            <div class="card-header">
+
+                <div>
+
+                    <h3>
+                        🧠 How It Works
+                    </h3>
+
+                </div>
+
+            </div>
+
+            <div class="insights-list">
+
+                <div class="insight-item">
+
+                    <span>1️⃣</span>
+
+                    <p>
+                        The student enters feedback.
+                    </p>
+
+                </div>
+
+                <div class="insight-item">
+
+                    <span>2️⃣</span>
+
+                    <p>
+                        The feedback is sent to the
+                        Flask AI backend.
+                    </p>
+
+                </div>
+
+                <div class="insight-item">
+
+                    <span>3️⃣</span>
+
+                    <p>
+                        The system groups comments by sentiment and teaching aspect.
+                    </p>
+
+                </div>
+
+                <div class="insight-item">
+
+                    <span>4️⃣</span>
+
+                    <p>
+                        See the combined summary and evidence for each comment.
+                    </p>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <script src="/js/feedback.js"></script>
+
 </body>
+
 </html>

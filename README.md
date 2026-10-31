@@ -1,37 +1,48 @@
 # AI Student Feedback Analytics
 
-A Flask website for anonymous student course feedback and evidence-backed teaching analytics.
+A Flask website for anonymous student feedback and teacher development insights. Students can submit feedback without an identity field; the app detects teaching aspects, sentiment, and evidence. Admin and faculty dashboards require sign-in. Faculty accounts are scoped to the matching faculty email/key.
 
-## Features
+## Run locally
 
-- **Anonymous Student Feedback**: Clean submission interface collecting course feedback without requesting student names or emails.
-- **Client-Side CSV/TSV/TXT Import**: Secure in-browser file reading allowing students to import batches up to 100 comments.
-- **Explainable Aspect & Sentiment Analysis**: Rule-based NLP detecting 10 core teaching aspects with quote excerpts, negation handling, mixed-sentiment detection, and support for English, Hindi, and Telugu phrases.
-- **Role-Based Access Control**: Secure staff authentication for administrators and faculty accounts with PBKDF2 hashing, login rate limiting, and CSRF protection.
-- **Faculty-Scoped Insights**: Faculty accounts automatically see only feedback submitted for their assigned classes; historical demo data is excluded.
-- **Executive PDF Reports**: Dynamic report generator producing downloadable PDF summaries with charts and student quote excerpts.
-- **Dual Database Support**: Seamless operation on local SQLite during development and managed PostgreSQL in production via SQLAlchemy.
+1. Install Python 3.12 and dependencies: `python -m pip install -r requirements.txt`.
+2. Set a local secret, for example in PowerShell: `$env:SECRET_KEY = "a-long-random-local-secret"`.
+3. Start the Flask server from the repository root: `python backend/app.py`.
+4. Open `http://127.0.0.1:5000`.
 
-## Run Locally (Windows)
+To enable teacher passwordless sign-in locally, set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, and `PUBLIC_BASE_URL` before starting the server. Use SMTP port 587 with STARTTLS or port 465 with SSL; set `PUBLIC_BASE_URL=http://127.0.0.1:5000` for local use. Keep mail credentials out of Git. Faculty accounts must first be provisioned by an administrator. Teachers then sign in at `/teacher-login` using a one-time link sent to their registered university email; the link expires after 10 minutes.
 
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r backend\requirements.txt
-$env:SECRET_KEY = "a-long-random-local-secret"
-$env:ADMIN_EMAIL = "admin@example.edu"
-$env:ADMIN_PASSWORD = "AdminPassword123!"
-python backend\app.py
-```
+Local use stores new feedback and one-time sign-in tokens in SQLite under `backend/data/feedback_submissions.sqlite3`. The historical CSV files, if present, support the original demo dashboard; they are excluded from Vercel deployments.
 
-Then open `http://127.0.0.1:5000` in your browser.
+## Deploy to Vercel (free Hobby project)
 
-## Deploy to Vercel
+This project has a root `app.py` Vercel entry point, a root `requirements.txt`, Python version configuration, and `vercel.json`. Vercel runs Flask as a serverless function. Connect this project to a GitHub repository from the Vercel dashboard and deploy it as a Python project; no build command or output directory is needed.
 
-1. Connect this repository to Vercel.
-2. In Project Settings → Environment Variables, configure:
-   - `DATABASE_URL`: Connection string to persistent PostgreSQL database.
-   - `SECRET_KEY`: A unique, secure random string.
-   - `ADMIN_EMAIL`: Initial administrator login email.
-   - `ADMIN_PASSWORD`: Initial administrator password (12+ characters).
-3. Deploy. Production deployments automatically initialize the database tables and provision the initial administrator account.
+Before the first production deployment:
+
+1. Create a PostgreSQL database using a provider that offers a free tier, such as Neon. Use its pooled connection string as `DATABASE_URL` (it should begin with `postgresql://` or `postgres://`). Vercel's old Postgres product is not provided; use an external database provider.
+2. In Vercel Project Settings → Environment Variables, add `DATABASE_URL`, `SECRET_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, and `PUBLIC_BASE_URL` for Production. Set `PUBLIC_BASE_URL` to the deployed site URL and use a verified mail sender. Keep all credentials private. Use a unique random `SECRET_KEY` and an admin password of at least 12 characters. Do not commit these values or paste them into source files.
+3. Redeploy after setting the variables. The first app start creates the required database tables and the initial administrator account. Later changes to `ADMIN_PASSWORD` do not reset an existing account; use the database/account administration process to change it.
+4. Check `/api/health`; a successful deployment responds with `{"status":"ok","database":"connected",...}`. Open `/login` to sign into the staff dashboard. Students submit feedback at `/feedback`.
+5. Sign in as admin and open `/insights` to add, edit, pause, or reactivate faculty accounts. Set each faculty account's `faculty_key` to the exact teacher email used on submissions that account should be scoped to. Faculty use the passwordless email link at `/teacher-login`; SMTP must be configured. Students can preview or submit comments without a password. The teacher email entered on the form is only a label for those comments; it does not connect to a college inbox or retrieve existing feedback. Staff reports remain behind staff sign-in.
+
+The public `/feedback` form accepts pasted comments and CSV, TSV, or TXT imports. CSV/TSV imports let the student choose the column containing comments. Files are parsed in the browser; the source file and other columns are not uploaded. The form analyzes up to 25 comments per batch.
+
+Vercel Hobby is free and deployments can stay online without a 30-day trial expiry. It has monthly usage caps; exceeding them can pause the project until usage resets. Hobby is limited to personal, non-commercial use under Vercel's current terms, so confirm eligibility before using it as an official college service. Vercel also runs the Python app as serverless functions rather than an always-on server. The database is separate from Vercel and remains available subject to the database provider's free-plan limits and terms. Keep backups of submitted feedback.
+
+## Security and privacy notes
+
+The feedback form does not request a student identity, but free text can contain identifying details. Do not solicit names or sensitive information. Password sign-in is limited to five failed attempts per email in a rolling 15-minute window; the short-term counter stores only keyed hashes of email identifiers. Admins can manage faculty accounts and inspect an audit log of successful sign-ins, lockouts, account changes, and staff report access. The application remains a prototype without a moderation workflow or institutional privacy/security review. Do not use it for confidential or high-stakes decisions without that review.
+
+
+
+## Teacher sign-in
+
+The public feedback page does not require a password. Teachers use the separate `/teacher-login` page and receive a one-time link by email. Only active faculty accounts provisioned by an administrator can sign in. The link expires after 10 minutes, can be used once, and repeated requests are limited to one per minute per account. Admins manage faculty from the Staff accounts section of `/insights`; pausing an account also revokes its outstanding sign-in links. An email address alone never grants access to stored feedback.
+
+## Analysis limits
+
+Live analysis uses a small, transparent English phrase lexicon with sentence/clause splitting. It can misread negation, informal wording, sarcasm, mixed clauses, or unseen vocabulary. Confidence is a heuristic, not a calibrated probability. The insight page aggregates submitted feedback; it does not rank teachers or recommend disciplinary action. Included legacy ML models and scripts are not used by the live analysis path.
+
+## Stack
+
+Python, Flask, SQLAlchemy, PostgreSQL (hosted) or SQLite (local), HTML, CSS, JavaScript, and Chart.js.

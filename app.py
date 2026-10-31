@@ -1,4 +1,2 @@
-"""Vercel WSGI entry point; local startup remains backend/app.py."""
-
+"""Vercel Flask entry point."""
 from backend.app import app
-
