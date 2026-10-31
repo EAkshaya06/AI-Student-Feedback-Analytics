@@ -75,6 +75,12 @@ audit_events = Table(
     Column("details_json", Text, nullable=False, default="{}"),
 )
 Index("ix_audit_events_created", audit_events.c.created_at)
+submission_batches = Table(
+    "submission_batches", metadata,
+    Column("batch_id", String(36), primary_key=True),
+    Column("created_at", String(64), nullable=False),
+    Column("submission_count", Integer, nullable=False),
+)
 
 metadata.create_all(engine)
 
@@ -84,3 +90,4 @@ def fetch_submissions(faculty_key=None):
         query = query.where(submissions.c.faculty == faculty_key)
     with engine.connect() as connection:
         return [dict(row) for row in connection.execute(query).mappings().all()]
+

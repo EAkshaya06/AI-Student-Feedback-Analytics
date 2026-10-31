@@ -282,8 +282,10 @@ document.addEventListener(
 
     function () {
 
+        document.getElementById("refreshPredictionsButton")?.addEventListener("click", loadPredictions);
         loadPredictions();
 
     }
 
 );
+

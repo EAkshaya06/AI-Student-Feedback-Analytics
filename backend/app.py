@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, send_from_directory, session, redirect, url_for
+from flask import Flask, jsonify, request, send_file, send_from_directory, session, redirect, url_for
 from flask_cors import CORS
 import pandas as pd
 import os
@@ -9,19 +9,24 @@ import hashlib
 import secrets
 import smtplib
 import ssl
+import io
+import csv
+from collections import Counter, defaultdict
 from email.message import EmailMessage
 from functools import wraps
 from datetime import datetime, timezone, timedelta
+from functools import lru_cache
+import uuid
 from werkzeug.security import check_password_hash, generate_password_hash
 try:
     from backend.storage import (
         engine, submissions, users, teacher_login_tokens, auth_login_attempts,
-        audit_events, fetch_submissions,
+        audit_events, submission_batches, fetch_submissions,
     )
 except ModuleNotFoundError:
     from storage import (
         engine, submissions, users, teacher_login_tokens, auth_login_attempts,
-        audit_events, fetch_submissions,
+        audit_events, submission_batches, fetch_submissions,
     )
 try:
     from backend.services.aspect_analysis import (
@@ -29,12 +34,14 @@ try:
         review_summary,
         teacher_improvement_suggestions,
     )
+    from backend.services import reporting
 except ModuleNotFoundError:
     from services.aspect_analysis import (
         analyze as analyze_text,
         review_summary,
         teacher_improvement_suggestions,
     )
+    import services.reporting as reporting
 
 app = Flask(__name__)
 IS_PRODUCTION = (os.environ.get("APP_ENV", "").lower() == "production"
@@ -48,7 +55,7 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
 allowed_origins = [origin.strip() for origin in os.environ.get("CORS_ORIGINS", "").split(",") if origin.strip()]
 if allowed_origins:
     CORS(app, origins=allowed_origins)
-app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 1_100_000
 
 @app.after_request
 def add_security_headers(response):
@@ -56,7 +63,27 @@ def add_security_headers(response):
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault("Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+    if request.path.startswith("/api/") or request.path in {"/dashboard", "/insights", "/analysis", "/predictions", "/login", "/teacher-login"}:
+        response.headers["Cache-Control"] = "no-store"
     return response
+
+
+def _csrf_token():
+    token = session.get("csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+    return token
+
+
+@app.before_request
+def protect_state_changes():
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.path.startswith("/api/"):
+        supplied = request.headers.get("X-CSRF-Token", "")
+        expected = session.get("csrf_token", "")
+        if not supplied or not expected or not hmac.compare_digest(supplied, expected):
+            return jsonify({"success": False, "message": "Your session expired. Refresh the page and try again."}), 400
 
 # =========================================================
 # PATHS
@@ -93,6 +120,19 @@ RECOMMENDATION_FILE = os.path.join(
 )
 def saved_submissions(faculty_key=None):
     return fetch_submissions(faculty_key)
+
+
+@lru_cache(maxsize=1)
+def _historical_analytics_records():
+    return reporting.historical_records(normalize_data(load_data()), analyze_text)
+
+
+def _staff_data_sources(actor):
+    live = reporting.live_records(
+        saved_submissions(), analyze_text,
+        faculty_key=actor["faculty_key"] if actor["role"] == "faculty" else None,
+    )
+    return _historical_analytics_records(), live
 
 def current_user():
     user_id = session.get("user_id")
@@ -332,6 +372,7 @@ def home():
 # =========================================================
 
 @app.route("/dashboard")
+@require_roles("admin", "faculty")
 def dashboard():
 
     return send_from_directory(
@@ -405,6 +446,17 @@ def js_files(filename):
     )
 
 
+@app.get("/api/session")
+def session_info():
+    user = current_user()
+    return jsonify(
+        authenticated=user is not None,
+        role=user["role"] if user else None,
+        email=user["email"] if user else None,
+        csrf_token=_csrf_token(),
+    )
+
+
 # =========================================================
 # API - FEEDBACK
 # =========================================================
@@ -469,7 +521,8 @@ def login():
     session.clear()
     session.permanent = True
     session["user_id"] = user["id"]
-    return jsonify({"success":True,"user":{"name":user["display_name"],"role":user["role"]}})
+    csrf_token = _csrf_token()
+    return jsonify({"success":True,"csrf_token":csrf_token,"user":{"name":user["display_name"],"role":user["role"]}})
 
 def _send_teacher_signin_email(address, signin_url):
     host = os.environ.get("SMTP_HOST", "").strip()
@@ -601,7 +654,8 @@ def verify_teacher_signin_link():
     session.clear()
     session.permanent = True
     session["user_id"] = user_id
-    return jsonify({"success": True, "user": {"name": display_name, "role": "faculty"}})
+    csrf_token = _csrf_token()
+    return jsonify({"success": True, "csrf_token": csrf_token, "user": {"name": display_name, "role": "faculty"}})
 
 
 @app.route("/api/auth/logout", methods=["POST"])
@@ -791,28 +845,24 @@ def public_dataset():
     })
 
 
-@app.route("/api/feedback")
-@require_roles("admin")
+@app.route("/api/feedback", methods=["GET"])
+@require_roles("admin", "faculty")
 def get_feedback():
-
-    df = normalize_data(load_data())
-    records = df.to_dict(orient="records") if not df.empty else []
-    for row in saved_submissions():
-        result = json.loads(row["analysis_json"])
-        records.insert(0, {"text": row["feedback_text"], "feedback_text": row["feedback_text"],
-            "sentiment": result["sentiment"], "category": ", ".join(a["aspect"] for a in result["aspects"]) or "Unclassified",
-            "emotion": "Not analyzed", "created_at": row["created_at"], "department": row["department"],
-            "course": row["course"], "faculty": row["faculty"], "anonymous": bool(row["anonymous"]), "analysis": result})
-
     actor = current_user()
+    historical, live = _staff_data_sources(actor)
+    try:
+        records, filters, notes, _options = reporting.select_records(request.args, actor, historical, live)
+        limit = max(0, min(1000, int(request.args.get("limit", "0"))))
+    except ValueError as error:
+        return jsonify({"success": False, "message": str(error)}), 400
+    count = len(records)
+    records.sort(key=lambda row: row.get("created_at", ""), reverse=True)
+    records.sort(key=lambda row: row["source"] != "live")
+    if limit:
+        records = records[:limit]
     with engine.begin() as connection:
-        _write_audit(connection, "feedback_records_viewed", actor=actor, details={"count": len(records)})
-
-    return jsonify({
-        "success": True,
-        "count": len(records),
-        "data": records
-    })
+        _write_audit(connection, "feedback_records_viewed", actor=actor, details={"count": count, "source": filters["source"]})
+    return jsonify({"success": True, "count": count, "data": records, "filters": filters, "notes": notes})
 
 
 # =========================================================
@@ -820,126 +870,17 @@ def get_feedback():
 # =========================================================
 
 @app.route("/api/analytics")
-@require_roles("admin")
+@require_roles("admin", "faculty")
 def analytics():
-
     actor = current_user()
+    historical, live = _staff_data_sources(actor)
+    try:
+        records, filters, notes, options = reporting.select_records(request.args, actor, historical, live)
+    except ValueError as error:
+        return jsonify({"success": False, "message": str(error)}), 400
     with engine.begin() as connection:
-        _write_audit(connection, "analytics_viewed", actor=actor)
-
-    df = normalize_data(load_data())
-
-    if df.empty:
-        df = pd.DataFrame(columns=["sentiment", "emotion", "category"])
-
-    submissions = saved_submissions()
-    total = len(df) + len(submissions)
-
-    # Sentiment counts
-    sentiment_counts = (
-        df["sentiment"]
-        .value_counts()
-        .to_dict()
-    )
-    for row in submissions:
-        label = json.loads(row["analysis_json"])["sentiment"]
-        sentiment_counts[label] = sentiment_counts.get(label, 0) + 1
-
-    positive = sentiment_counts.get(
-        "positive",
-        0
-    )
-
-    neutral = sentiment_counts.get(
-        "neutral",
-        0
-    )
-
-    negative = sentiment_counts.get(
-        "negative",
-        0
-    )
-
-    # Percentages
-    positive_percentage = positive / total * 100 if total else 0
-
-    neutral_percentage = neutral / total * 100 if total else 0
-
-    negative_percentage = negative / total * 100 if total else 0
-
-    # Emotion
-    emotion_counts = (
-        df["emotion"]
-        .value_counts()
-        .to_dict()
-    )
-
-    # Category
-    category_counts = (
-        df["category"]
-        .value_counts()
-        .to_dict()
-    )
-    for row in submissions:
-        for aspect in json.loads(row["analysis_json"])["aspects"]:
-            key = aspect["aspect"].lower()
-            category_counts[key] = category_counts.get(key, 0) + 1
-
-    # Sentiment by category
-    sentiment_by_category = pd.crosstab(
-        df["category"],
-        df["sentiment"]
-    ).fillna(0)
-
-    sentiment_category = {}
-
-    for category in sentiment_by_category.index:
-
-        sentiment_category[
-            category
-        ] = sentiment_by_category.loc[
-            category
-        ].to_dict()
-
-    return jsonify({
-
-        "success": True,
-
-        "total": total,
-
-        "positive": positive,
-
-        "neutral": neutral,
-
-        "negative": negative,
-
-        "positive_percentage": round(
-            positive_percentage,
-            2
-        ),
-
-        "neutral_percentage": round(
-            neutral_percentage,
-            2
-        ),
-
-        "negative_percentage": round(
-            negative_percentage,
-            2
-        ),
-
-        "sentiment": sentiment_counts,
-
-        "emotion": emotion_counts,
-
-        "category": category_counts,
-
-        "sentiment_by_category":
-            sentiment_category,
-        "mixed": sentiment_counts.get("mixed", 0),
-        "stored_submissions": len(submissions)
-
-    })
+        _write_audit(connection, "analytics_viewed", actor=actor, details={"source": filters["source"], "count": len(records)})
+    return jsonify(reporting.analytics_payload(records, filters, notes, options))
 
 
 # =========================================================
@@ -957,10 +898,12 @@ def _feedback_comments(data):
     comments = [item.strip() for item in raw_comments if isinstance(item, str) and item.strip()]
     if not comments:
         return None, "Please enter at least one student feedback comment."
-    if len(comments) > 25:
-        return None, "Please analyze up to 25 comments at a time."
-    if any(len(item) > 5000 for item in comments) or sum(map(len, comments)) > 20000:
-        return None, "Keep each comment under 5,000 characters and the total under 20,000 characters."
+    if len(comments) > 100:
+        return None, "Please submit up to 100 comments at a time."
+    if any(len(item) > 20000 for item in comments) or sum(map(len, comments)) > 1_000_000:
+        return None, "Keep each comment under 20,000 characters and the total under 1,000,000 characters."
+    if any(any(ord(char) < 32 and char not in "\t\n\r" for char in item) for item in comments):
+        return None, "Remove unsupported control characters from the feedback."
     return comments, None
 
 
@@ -969,16 +912,19 @@ def _analyze_feedback_batch(comments):
     sentiment_counts = {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}
     aspect_groups = {}
     for result in results:
+        if not result.get("language_supported", True):
+            continue
         label = result.get("sentiment", "neutral")
         sentiment_counts[label] = sentiment_counts.get(label, 0) + 1
         for aspect in result.get("aspects", []):
             group = aspect_groups.setdefault(aspect["aspect"], {
-                "labels": [], "evidence": [], "confidence": []
+                "labels": [], "evidence": []
             })
             group["labels"].append(aspect.get("sentiment", "neutral"))
-            group["evidence"].extend(aspect.get("evidence", []))
-            group["confidence"].append(aspect.get("confidence", 0))
-    overall = (
+            evidence = aspect.get("evidence", [])
+            group["evidence"].extend(evidence if isinstance(evidence, list) else [evidence])
+    supported_total = sum(sentiment_counts.values())
+    overall = "unsupported" if not supported_total else (
         "mixed" if sentiment_counts["mixed"] or (sentiment_counts["positive"] and sentiment_counts["negative"])
         else "positive" if sentiment_counts["positive"]
         else "negative" if sentiment_counts["negative"]
@@ -1002,7 +948,6 @@ def _analyze_feedback_batch(comments):
         aspects.append({
             "aspect": name,
             "sentiment": sentiment,
-            "confidence": round(sum(group["confidence"]) / len(group["confidence"]), 2),
             "evidence": list(dict.fromkeys(group["evidence"]))[:8],
             "mentions": len(labels)
         })
@@ -1012,18 +957,19 @@ def _analyze_feedback_batch(comments):
     ]
     return {
         "sentiment": overall,
-        "confidence": round(sum(item.get("confidence", 0) for item in results) / len(results), 2),
         "aspects": aspects,
         "results": detailed_results,
         "sentiment_counts": sentiment_counts,
         "total": len(comments),
-        "review": review_summary(overall, aspects),
-        "improvement_suggestions": teacher_improvement_suggestions(aspects),
+        "sentiment_total": supported_total,
+        "unsupported_sentiment_count": len(comments) - supported_total,
+        "review": review_summary(overall, aspects) if supported_total else "No supported language signal was found; review the original comments directly.",
+        "improvement_suggestions": teacher_improvement_suggestions(aspects) if supported_total else [],
         "strengths": sorted({aspect for item in results for aspect in item.get("strengths", [])}),
         "improvements": sorted({aspect for item in results for aspect in item.get("improvements", [])}),
         "suggestions": sorted({aspect for item in results for aspect in item.get("suggestions", [])}),
         "concerns": sorted({aspect for item in results for aspect in item.get("concerns", [])}),
-        "method": "Aggregated explainable sentence and phrase rules"
+        "method": "Explainable rules; language support and matching evidence are shown per comment"
     }
 
 
@@ -1045,37 +991,74 @@ def analyze_feedback():
 
 @app.route("/api/feedback", methods=["POST"])
 def submit_feedback():
-    from sqlalchemy import insert
+    from sqlalchemy import insert, select
+    from sqlalchemy.exc import IntegrityError
     data = request.get_json(silent=True) or {}
     if not isinstance(data, dict):
         return jsonify({"success": False, "message": "Feedback must be sent as a JSON object."}), 400
     comments, error = _feedback_comments(data)
     if error:
         return jsonify({"success": False, "message": error}), 400
-    teacher_email = str(data.get("teacher_email", "")).strip().lower()
-    if teacher_email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", teacher_email):
-        return jsonify({"success": False, "message": "Enter a valid teacher college email address."}), 400
-    fields = [str(data.get(k, "")).strip()[:160] for k in ("department", "course")]
-    faculty_name = str(data.get("faculty", "")).strip()[:160]
-    faculty_label = teacher_email or faculty_name
+    metadata = data.get("metadata", data)
+    if not isinstance(metadata, dict):
+        return jsonify({"success": False, "message": "Academic details must be sent as an object."}), 400
+    field_limits = {"department": 120, "academic_year": 32, "semester": 32, "subject": 160, "section": 80, "faculty": 160}
+    academic = {}
+    for name, limit in field_limits.items():
+        value = str(metadata.get(name, "")).strip()
+        if len(value) > limit or any(ord(char) < 32 and char not in "\t\n\r" for char in value):
+            return jsonify({"success": False, "message": f"Check the {name.replace('_', ' ')} field."}), 400
+        academic[name] = value
+    legacy_email = str(data.get("teacher_email", "")).strip().lower()
+    if legacy_email:
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", legacy_email) or len(legacy_email) > 254:
+            return jsonify({"success": False, "message": "Enter a valid teacher college email address."}), 400
+        if not academic["faculty"]:
+            academic["faculty"] = legacy_email
+    try:
+        batch_id = str(uuid.UUID(str(data.get("batch_id") or uuid.uuid4())))
+    except (ValueError, TypeError, AttributeError):
+        return jsonify({"success": False, "message": "The submission reference is invalid. Refresh and try again."}), 400
     analyses = [analyze_text(comment) for comment in comments]
     report = _analyze_feedback_batch(comments)
     submission_ids = []
-    with engine.begin() as connection:
-        for comment, analysis in zip(comments, analyses):
-            result = connection.execute(insert(submissions).values(
-                created_at=datetime.now(timezone.utc).isoformat(),
-                feedback_text=comment,
-                department=fields[0],
-                course=fields[1],
-                faculty=faculty_label,
-                anonymous=True,
-                analysis_json=json.dumps(analysis)
+    try:
+        with engine.begin() as connection:
+            if connection.execute(select(submission_batches.c.batch_id).where(submission_batches.c.batch_id == batch_id)).first():
+                return jsonify({"success": True, "duplicate_batch": True, "count": 0, "results": []})
+            created_at = datetime.now(timezone.utc).isoformat()
+            connection.execute(insert(submission_batches).values(
+                batch_id=batch_id, created_at=created_at, submission_count=len(comments)
             ))
-            submission_ids.append(result.inserted_primary_key[0])
+            for comment, analysis in zip(comments, analyses):
+                saved_analysis = {**analysis, "_metadata": academic}
+                result = connection.execute(insert(submissions).values(
+                    created_at=created_at,
+                    feedback_text=comment,
+                    department=academic["department"],
+                    course=academic["subject"],
+                    faculty=academic["faculty"],
+                    anonymous=True,
+                    analysis_json=json.dumps(saved_analysis, ensure_ascii=False)
+                ))
+                submission_ids.append(result.inserted_primary_key[0])
+    except IntegrityError:
+        with engine.connect() as connection:
+            duplicate = connection.execute(select(submission_batches.c.batch_id).where(submission_batches.c.batch_id == batch_id)).first()
+        if duplicate:
+            return jsonify({"success": True, "duplicate_batch": True, "count": 0, "results": []})
+        app.logger.exception("Feedback submission could not be stored")
+        return jsonify({"success": False, "message": "Feedback could not be saved. Please try again."}), 500
+    except Exception:
+        app.logger.exception("Feedback submission could not be stored")
+        return jsonify({"success": False, "message": "Feedback could not be saved. Please try again."}), 500
     return jsonify({
         "success": True,
+        "stored": True,
+        "batch_id": batch_id,
         "submission_ids": submission_ids,
+        "count": len(submission_ids),
+        "results": [{"feedback": comment, **analysis} for comment, analysis in zip(comments, analyses)],
         "analysis": report,
         "message": f"Thank you. {len(comments)} comment(s) were stored without student identity."
     }), 201
@@ -1110,45 +1093,107 @@ def insight_center():
 # =========================================================
 
 @app.route("/api/recommendations")
-@require_roles("admin")
+@require_roles("admin", "faculty")
 def recommendations():
-
     actor = current_user()
+    historical, live = _staff_data_sources(actor)
+    try:
+        records, filters, notes, options = reporting.select_records(request.args, actor, historical, live)
+    except ValueError as error:
+        return jsonify({"success": False, "message": str(error)}), 400
+    payload = reporting.analytics_payload(records, filters, notes, options)
     with engine.begin() as connection:
-        _write_audit(connection, "recommendations_viewed", actor=actor)
+        _write_audit(connection, "recommendations_viewed", actor=actor, details={"source": filters["source"]})
+    advice = {
+        "Teaching effectiveness": "Ask students for a specific example of what would make learning more effective.",
+        "Teaching clarity": "Break difficult explanations into steps, add a worked example, and check understanding.",
+        "Subject knowledge": "Invite questions on key concepts and connect explanations to concrete examples.",
+        "Teaching pace": "Pause after difficult topics and leave time for questions.",
+        "Student engagement": "Add a short discussion, practical example, or low-pressure participation activity.",
+        "Doubt clarification": "Set aside regular time for questions and explain how students can get help.",
+        "Practical learning": "Add a guided exercise or real-world example, then give students time to apply it.",
+        "Assignments and assessment": "Clarify instructions, workload, assessment criteria, and deadlines.",
+        "Course organization": "Share a clear course plan and flag schedule changes early.",
+        "Learning environment": "Ask which room, facility, or equipment issue needs attention.",
+    }
+    recommendations_list = [
+        {"topic": item["aspect"], "mentions": item["mentions"], "suggestion": advice.get(item["aspect"], "Ask students for one specific example before choosing a next step."), "evidence": item["evidence"]}
+        for item in payload["insights"]["improvement_areas"]
+    ]
+    return jsonify({"success": True, "recommendations": recommendations_list, "insights": payload["insights"], "notes": notes})
 
-    if os.path.exists(
-        RECOMMENDATION_FILE
-    ):
 
-        with open(
-            RECOMMENDATION_FILE,
-            "r",
-            encoding="utf-8"
-        ) as file:
-
-            recommendations_list = [
-                line.strip()
-                for line in file
-                if line.strip()
-            ]
-
-        return jsonify({
-
-            "success": True,
-
-            "recommendations":
-                recommendations_list
-
-        })
-
-    return jsonify({
-
-        "success": True,
-
-        "recommendations": []
-
-    })
+@app.get("/api/report.pdf")
+@require_roles("admin", "faculty")
+def pdf_report():
+    from xml.sax.saxutils import escape
+    actor = current_user()
+    historical, live = _staff_data_sources(actor)
+    try:
+        records, filters, notes, options = reporting.select_records(request.args, actor, historical, live)
+    except ValueError as error:
+        return jsonify({"success": False, "message": str(error)}), 400
+    payload = reporting.analytics_payload(records, filters, notes, options)
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, KeepTogether
+    except ImportError:
+        return jsonify({"success": False, "message": "PDF support is unavailable. Please try again later."}), 503
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=16 * mm, leftMargin=16 * mm, topMargin=16 * mm, bottomMargin=16 * mm)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="ReportNote", parent=styles["BodyText"], fontSize=8, leading=11, textColor=colors.HexColor("#536577")))
+    story = [Paragraph("AI Student Feedback Analytics", styles["Title"]),
+             Paragraph("Evidence-based academic feedback summary", styles["Heading2"]),
+             Spacer(1, 4 * mm),
+             Paragraph("Data source: " + escape(payload["data_source_label"]), styles["BodyText"]),
+             Paragraph("Filters: " + escape(" · ".join(f"{key.replace('_', ' ').title()}: {value}" for key, value in filters.items())), styles["ReportNote"]),
+             Spacer(1, 3 * mm)]
+    summary = [["Records", "Analyzed", "Positive", "Neutral", "Negative"],
+               [str(payload["total"]), str(payload["sentiment_total"]),
+                f"{payload['positive']} ({payload['positive_percentage']}%)",
+                f"{payload['neutral']} ({payload['neutral_percentage']}%)",
+                f"{payload['negative']} ({payload['negative_percentage']}%)"]]
+    table = Table(summary, repeatRows=1)
+    table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#183B56")),
+                               ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                               ("GRID", (0, 0), (-1, -1), .4, colors.HexColor("#CFD8E3")),
+                               ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                               ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7)]))
+    story.extend([table, Spacer(1, 5 * mm)])
+    if payload["unsupported_sentiment_count"]:
+        story.append(Paragraph(f"{payload['unsupported_sentiment_count']} comments were excluded from sentiment totals because the language could not be analyzed reliably.", styles["ReportNote"]))
+    story.append(Paragraph("Aspect-level counts", styles["Heading2"]))
+    aspect_rows = [["Aspect", "Positive", "Neutral", "Negative"]]
+    aspect_rows.extend([[escape(name), str(counts["positive"]), str(counts["neutral"]), str(counts["negative"])]
+                        for name, counts in payload["aspect_distribution"].items()])
+    if len(aspect_rows) == 1:
+        aspect_rows.append(["No supported aspect evidence", "0", "0", "0"])
+    aspect_table = Table(aspect_rows, colWidths=[92 * mm, 24 * mm, 24 * mm, 24 * mm], repeatRows=1)
+    aspect_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E9F0F5")),
+                                     ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#CFD8E3")),
+                                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                     ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+    story.extend([aspect_table, Spacer(1, 4 * mm)])
+    for title, key in (("Frequently mentioned strengths", "strengths"), ("Improvement areas", "improvement_areas")):
+        story.append(Paragraph(title, styles["Heading2"]))
+        items = payload["insights"][key]
+        if not items:
+            story.append(Paragraph("There is not enough aspect-level evidence for this selection.", styles["ReportNote"]))
+        for item in items:
+            block = [Paragraph(f"{escape(item['aspect'])} · {item['mentions']} mentions", styles["Heading3"])]
+            block.extend(Paragraph("“" + escape(quote[:420]) + "”", styles["ReportNote"]) for quote in item["evidence"])
+            story.append(KeepTogether(block))
+    for note in notes:
+        story.append(Paragraph(escape(note), styles["ReportNote"]))
+    story.append(Spacer(1, 3 * mm))
+    story.append(Paragraph("Automated language analysis is an estimate, not a probability. Review the original feedback in context; do not use aggregate sentiment alone to rank or make disciplinary decisions about faculty.", styles["ReportNote"]))
+    doc.build(story)
+    buffer.seek(0)
+    return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name="student-feedback-report.pdf")
 
 
 # =========================================================
@@ -1212,3 +1257,4 @@ if __name__ == "__main__":
         port=5000,
         debug=os.environ.get("FLASK_DEBUG", "0") == "1"
     )
+

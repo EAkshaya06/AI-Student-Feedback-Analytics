@@ -16,7 +16,7 @@ document.getElementById("teacherLinkForm").addEventListener("submit", async even
     button.textContent = "Sending link…";
     message.textContent = "";
     try {
-        const response = await fetch("/api/auth/teacher-link", {
+        const response = await apiRequest("/api/auth/teacher-link", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({email: document.getElementById("teacherEmail").value.trim()})
@@ -45,13 +45,14 @@ document.getElementById("verifyTeacherLink").addEventListener("click", async eve
     button.textContent = "Verifying link…";
     message.textContent = "";
     try {
-        const response = await fetch("/api/auth/teacher-link/verify", {
+        const response = await apiRequest("/api/auth/teacher-link/verify", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({token: linkToken})
         });
         const data = await response.json();
         if (!response.ok || !data.success) throw new Error(data.message || "This link is invalid or has expired.");
+        setCsrfToken(data.csrf_token);
         window.location.replace("/insights");
     } catch (error) {
         message.textContent = error.message === "Failed to fetch"
@@ -61,3 +62,4 @@ document.getElementById("verifyTeacherLink").addEventListener("click", async eve
         button.textContent = "Sign in securely →";
     }
 });
+

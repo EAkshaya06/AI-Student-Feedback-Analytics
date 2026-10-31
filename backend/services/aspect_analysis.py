@@ -150,52 +150,47 @@ def _polarity(sentence):
     if neg: return "negative", pos, neg
     return "neutral", pos, neg
 
+try:
+    from backend.services.analysis_engine import analyze_comment as _analyze_comment
+except ModuleNotFoundError:
+    from services.analysis_engine import analyze_comment as _analyze_comment
+
+
 def analyze(text):
-    text = re.sub(r"\s+", " ", str(text or "")).strip()
-    if not text:
-        return {"sentiment":"neutral", "confidence":0.0, "aspects":[], "strengths":[], "improvements":[], "suggestions":[], "concerns":[], "quality":{"short":True}, "method":"Explainable sentence and phrase rules"}
-    clauses = _sentences(text)
-    aspect_results = []
-    for aspect, phrases in ASPECTS.items():
-        matches = []
-        for clause in clauses:
-            lower = clause.lower()
-            matched = [p for p in phrases if re.search(r"(?<![a-z])" + re.escape(p) + r"(?![a-z])", lower)]
-            if matched:
-                label, pos, neg = _polarity(clause)
-                if label == "neutral" and SUGGESTION.search(clause):
-                    label = "improvement"
-                if label == "mixed":
-                    # Report a mixed aspect when praise and criticism coexist in one clause.
-                    pass
-                matches.append((clause, label, pos, neg, matched))
-        if matches:
-            labels = {m[1] for m in matches}
-            if "mixed" in labels or ("positive" in labels and "negative" in labels):
-                label = "mixed"
-            elif "improvement" in labels:
-                label = "improvement"
-            else:
-                label = next(iter(labels))
-            evidence = list(dict.fromkeys(m[0] for m in matches))
-            aspect_results.append({"aspect":aspect,"sentiment":label,"confidence":round(min(.78, .54 + .08 * sum(m[2]+m[3] for m in matches)),2),"evidence":evidence})
-    overall, pos, neg = _polarity(text)
-    if pos and neg: overall = "mixed"
-    confidence = round(min(.76, .48 + .06 * (pos+neg) + .02 * max(0, len(clauses)-1)), 2) if pos+neg else .42
-    strengths = [a["aspect"] for a in aspect_results if a["sentiment"] == "positive"]
-    improvements = [a["aspect"] for a in aspect_results if a["sentiment"] in ("negative", "mixed", "improvement")]
-    suggestions = [a["aspect"] for a in aspect_results if any(SUGGESTION.search(e) for e in a["evidence"])]
-    concerns = [a["aspect"] for a in aspect_results if a["sentiment"] == "negative" and a["aspect"] == "Learning environment"]
+    """Return the richer explainable analysis in the shape used by the live API."""
+    raw = _analyze_comment(str(text or ""))
+    sentiment = raw["sentiment"]
+    mixed = raw.get("_positive_hits", 0) > 0 and raw.get("_negative_hits", 0) > 0
+    if mixed and raw.get("language_supported"):
+        sentiment = "mixed"
+    aspects = []
+    for item in raw.get("aspects", []):
+        evidence = item.get("evidence", "")
+        aspects.append({
+            "aspect": item["aspect"],
+            "sentiment": item["sentiment"],
+            "score": item.get("score", 0),
+            "evidence": [evidence] if evidence else [],
+        })
+    strengths = [item["aspect"] for item in aspects if item["sentiment"] == "positive"]
+    improvements = [item["aspect"] for item in aspects if item["sentiment"] in {"negative", "mixed"}]
     return {
-        "sentiment": overall,
-        "confidence": confidence,
-        "aspects": aspect_results,
+        "sentiment": sentiment,
+        "sentiment_score": raw["sentiment_score"],
+        "mixed_opinion": mixed,
+        "language": raw["language"],
+        "language_supported": raw["language_supported"],
+        "sentiment_supported": raw["language_supported"],
+        "analysis_method": raw["analysis_method"],
+        "analysis_note": raw["analysis_note"],
+        "aspect_note": raw["aspect_note"],
+        "aspects": aspects,
         "strengths": strengths,
         "improvements": improvements,
-        "suggestions": suggestions,
-        "concerns": concerns,
-        "review": _comment_review(overall, aspect_results),
-        "improvement_suggestions": teacher_improvement_suggestions(aspect_results),
-        "quality": {"short": len(re.findall(r"\w+", text)) < 3},
-        "method": "Explainable sentence and phrase rules",
+        "suggestions": [],
+        "concerns": [item["aspect"] for item in aspects if item["sentiment"] == "negative"],
+        "review": review_summary(sentiment, aspects) if raw["language_supported"] else raw["analysis_note"],
+        "improvement_suggestions": teacher_improvement_suggestions(aspects) if raw["language_supported"] else [],
+        "method": raw["analysis_method"],
     }
+

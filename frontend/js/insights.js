@@ -15,7 +15,7 @@ function themeItems(id, names, summary) {
 }
 
 async function requestAdminData(url, options = {}) {
-    const response = await fetch(url, {
+    const response = await apiRequest(url, {
         ...options,
         headers: { "Content-Type": "application/json", ...(options.headers || {}) }
     });
@@ -192,6 +192,8 @@ document.getElementById("staffAccountList")?.addEventListener("click", async eve
 
 document.getElementById("refreshAuditLog")?.addEventListener("click", loadAuditLog);
 document.getElementById("logoutButton")?.addEventListener("click", async () => {
-    try { await fetch("/api/auth/logout", {method:"POST"}); } finally { window.location.assign("/login"); }
+    try { await apiRequest("/api/auth/logout", {method:"POST"}); } finally { window.location.assign("/login"); }
 });
+document.getElementById("refreshInsightsButton")?.addEventListener("click", loadInsights);
 document.addEventListener("DOMContentLoaded", loadInsights);
+
