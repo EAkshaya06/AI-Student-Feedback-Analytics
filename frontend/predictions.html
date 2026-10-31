@@ -8,12 +8,12 @@
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
 
-    <title>Predictive Analytics</title>
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>Sentiment Classification | Staff Dashboard</title>
 
     <link rel="stylesheet"
-          href="/css/style.css">
+          href="./css/style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 
 </head>
 
@@ -28,29 +28,28 @@
         <div class="nav-container">
 
             <div class="logo">
-                Teacher Feedback Intelligence
+                AI Feedback Analytics
             </div>
 
             <nav class="nav-links">
 
-                <a href="/">
+                <a href="index.html">
                     Home
                 </a>
 
-                <a href="/dashboard">
+                <a href="dashboard.html">
                     Dashboard
                 </a>
 
-                <a href="/feedback">
+                <a href="feedback.html">
                     Analyze Feedback
                 </a>
-<a href="/teacher-login">Staff sign in</a>
 
-                <a href="/analysis">
+                <a href="analysis.html">
                     Analytics
                 </a>
 
-                <a href="/predictions"
+                <a href="predictions.html"
                    class="active">
                     Predictions
                 </a>
@@ -72,12 +71,11 @@
             <div>
 
                 <h1>
-                    Predictive Analytics
+                    Historical Sentiment Labels
                 </h1>
 
                 <p>
-                    Machine-learning based sentiment
-                    predictions from student feedback.
+                    Review sentiment labels stored with the selected historical/demo records.
                 </p>
 
             </div>
@@ -85,9 +83,10 @@
 
             <button
                 class="primary-btn"
-                onclick="loadPredictions()">
+                id="refreshPredictionsButton"
+                type="button">
 
-                🔄 Refresh
+                        🔄 Refresh
 
             </button>
 
@@ -129,7 +128,7 @@
                 <div>
 
                     <p>
-                        Predicted Positive
+                        Positive labels
                     </p>
 
                     <h2 id="predictionPositive">
@@ -150,7 +149,7 @@
                 <div>
 
                     <p>
-                        Predicted Neutral
+                        Neutral labels
                     </p>
 
                     <h2 id="predictionNeutral">
@@ -171,7 +170,7 @@
                 <div>
 
                     <p>
-                        Predicted Negative
+                        Negative labels
                     </p>
 
                     <h2 id="predictionNegative">
@@ -194,12 +193,11 @@
                 <div>
 
                     <h3>
-                        🤖 Model Prediction Distribution
+                        Sentiment Label Distribution
                     </h3>
 
                     <p>
-                        Sentiment predicted by the trained
-                        machine-learning model.
+                        This page does not run or evaluate a new machine-learning model.
                     </p>
 
                 </div>
@@ -249,7 +247,7 @@
                                 Feature Extraction:
                             </strong>
 
-                            TF-IDF
+                                Included as a legacy project artifact; not used by this page
 
                         </p>
 
@@ -266,7 +264,7 @@
                                 Algorithm:
                             </strong>
 
-                            Logistic Regression
+                                Historical CSV labels are displayed as stored
 
                         </p>
 
@@ -300,7 +298,7 @@
                                 Dataset:
                             </strong>
 
-                            Student Feedback
+                                Historical/demo dataset
 
                         </p>
 
@@ -333,8 +331,7 @@
                         <span>1️⃣</span>
 
                         <p>
-                            Feedback is converted into
-                            numerical TF-IDF features.
+                            The source selector for this page is the historical/demo dataset.
                         </p>
 
                     </div>
@@ -345,8 +342,7 @@
                         <span>2️⃣</span>
 
                         <p>
-                            The trained classification
-                            model predicts sentiment.
+                            Stored sentiment labels are counted as provided.
                         </p>
 
                     </div>
@@ -357,8 +353,7 @@
                         <span>3️⃣</span>
 
                         <p>
-                            Predictions are summarized
-                            for decision-making.
+                            The summary is descriptive and is not a faculty ranking.
                         </p>
 
                     </div>
@@ -383,7 +378,8 @@
     </main>
 
 
-    <script src="/js/prediction.js"></script>
+    <script src="./js/api.js"></script>
+    <script src="./js/prediction.js"></script>
 
 </body>
 

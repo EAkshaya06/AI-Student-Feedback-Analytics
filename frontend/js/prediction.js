@@ -31,7 +31,7 @@ async function loadPredictions() {
 
         const response =
             await fetch(
-                "/api/public-dataset"
+                apiUrl("/api/feedback")
             );
 
 
@@ -46,12 +46,6 @@ async function loadPredictions() {
 
         const result =
             await response.json();
-
-
-        console.log(
-            "Prediction data:",
-            result
-        );
 
 
         if (!result.success ||
@@ -281,6 +275,9 @@ document.addEventListener(
     "DOMContentLoaded",
 
     function () {
+
+        const refresh = document.getElementById("refreshPredictionsButton");
+        if (refresh) refresh.addEventListener("click", loadPredictions);
 
         loadPredictions();
 

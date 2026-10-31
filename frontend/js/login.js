@@ -1,13 +1,41 @@
-document.getElementById("loginForm").addEventListener("submit", async event => {
+document.addEventListener("DOMContentLoaded", async () => {
+  const form = document.getElementById("loginForm");
+  const button = document.getElementById("loginButton");
+  const message = document.getElementById("loginMessage");
+  try {
+    const session = await refreshSession();
+    if (session.authenticated) window.location.assign("/dashboard");
+  } catch {
+    showLoginMessage(message, "The sign-in service is unavailable. Refresh the page and try again.", true);
+  }
+
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const button = event.currentTarget.querySelector("button[type=submit]");
-    const error = document.getElementById("loginError");
-    button.disabled = true; button.textContent = "Signing in…"; error.textContent = "";
+    button.disabled = true;
+    button.textContent = "Signing in…";
+    showLoginMessage(message, "Checking your account…", false);
     try {
-        const response = await fetch("/api/auth/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({email:document.getElementById("email").value,password:document.getElementById("password").value})});
-        const data = await response.json();
-        if (!response.ok || !data.success) throw new Error(data.message || "Sign in failed. Check your details and try again.");
-        window.location.assign(data.user.role === "admin" ? "/dashboard" : "/insights");
-    } catch (e) { error.textContent = e.message === "Failed to fetch" ? "The sign-in service is unavailable. Start the app server and try again." : e.message; }
-    finally { button.disabled = false; button.innerHTML = 'Sign in <span aria-hidden="true">→</span>'; }
+      const response = await apiRequest("/api/login", {
+        method: "POST",
+        body: {
+          email: document.getElementById("loginEmail").value.trim(),
+          password: document.getElementById("loginPassword").value,
+          next: new URLSearchParams(window.location.search).get("next") || "/dashboard",
+        },
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || "Sign-in failed.");
+      setCsrfToken(data.csrf_token);
+      window.location.assign(data.next || "/dashboard");
+    } catch (error) {
+      showLoginMessage(message, error.message || "Sign-in failed. Try again.", true);
+      button.disabled = false;
+      button.textContent = "Sign in";
+    }
+  });
 });
+
+function showLoginMessage(target, text, isError) {
+  target.textContent = text;
+  target.className = `form-message${isError ? " error" : ""}`;
+}

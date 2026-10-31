@@ -1,451 +1,96 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Student Feedback Dashboard</title>
-
-    <link rel="stylesheet" href="/css/style.css">
-
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Staff Dashboard | AI Feedback Analytics</title>
+  <link rel="stylesheet" href="./css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 </head>
-
 <body>
-
-    <!-- ================= NAVBAR ================= -->
-
-    <header class="navbar">
-
-        <div class="nav-container">
-
-            <div class="logo">
-                Teacher Feedback Intelligence
-            </div>
-
-            <nav class="nav-links">
-
-                <a href="/">Home</a>
-
-                <a href="/dashboard" class="active">
-                    Dashboard
-                </a>
-
-                <a href="/feedback">
-                    Analyze Feedback
-                </a>
-                <a href="/insights">
-                    Staff insights
-                </a>
-<a href="/teacher-login">Staff sign in</a>
-
-                <a href="/analysis">
-                    Analytics
-                </a>
-
-                <a href="/predictions">
-                    Predictions
-                </a>
-
-            </nav>
-
-        </div>
-
-    </header>
-
-
-    <!-- ================= DASHBOARD ================= -->
-
-    <main class="dashboard-container">
-
-        <div class="dashboard-header">
-
-            <div>
-
-                <h1>
-                    Student Feedback Dashboard
-                </h1>
-
-                <p>
-                    AI-powered analysis of student feedback,
-                    sentiment, emotions and topics.
-                </p>
-
-            </div>
-
-            <button
-                class="primary-btn"
-                onclick="loadDashboard()">
-
-                🔄 Refresh Data
-
-            </button>
-
-        </div>
-
-
-        <!-- ================= STAT CARDS ================= -->
-
-        <section class="stats-grid">
-
-            <div class="stat-card">
-
-                <div class="stat-icon">
-                    📝
-                </div>
-
-                <div>
-
-                    <p>
-                        Total Feedback
-                    </p>
-
-                    <h2 id="totalFeedback">
-                        0
-                    </h2>
-
-                </div>
-
-            </div>
-
-
-            <div class="stat-card">
-
-                <div class="stat-icon">
-                    😊
-                </div>
-
-                <div>
-
-                    <p>
-                        Positive Feedback
-                    </p>
-
-                    <h2 id="positiveFeedback">
-                        0%
-                    </h2>
-
-                </div>
-
-            </div>
-
-
-            <div class="stat-card">
-
-                <div class="stat-icon">
-                    😐
-                </div>
-
-                <div>
-
-                    <p>
-                        Neutral Feedback
-                    </p>
-
-                    <h2 id="neutralFeedback">
-                        0%
-                    </h2>
-
-                </div>
-
-            </div>
-
-
-            <div class="stat-card">
-
-                <div class="stat-icon">
-                    😞
-                </div>
-
-                <div>
-
-                    <p>
-                        Negative Feedback
-                    </p>
-
-                    <h2 id="negativeFeedback">
-                        0%
-                    </h2>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================= CHARTS ================= -->
-
-        <section class="charts-grid">
-
-
-            <!-- SENTIMENT -->
-
-            <div class="dashboard-card">
-
-                <div class="card-header">
-
-                    <div>
-
-                        <h3>
-                            Sentiment Analysis
-                        </h3>
-
-                        <p>
-                            Overall student sentiment
-                        </p>
-
-                    </div>
-
-                </div>
-
-                <div class="chart-container">
-
-                    <canvas id="sentimentChart"></canvas>
-
-                </div>
-
-            </div>
-
-
-            <!-- EMOTION -->
-
-            <div class="dashboard-card">
-
-                <div class="card-header">
-
-                    <div>
-
-                        <h3>
-                            Emotion Detection
-                        </h3>
-
-                        <p>
-                            Detected emotions in feedback
-                        </p>
-
-                    </div>
-
-                </div>
-
-                <div class="chart-container">
-
-                    <canvas id="emotionChart"></canvas>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================= CATEGORY ================= -->
-
-        <section class="dashboard-card topic-card">
-
-            <div class="card-header">
-
-                <div>
-
-                    <h3>
-                        Feedback by Category
-                    </h3>
-
-                    <p>
-                        Distribution of student feedback
-                    </p>
-
-                </div>
-
-            </div>
-
-            <div class="chart-container large-chart">
-
-                <canvas id="categoryChart"></canvas>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================= SENTIMENT CATEGORY ================= -->
-
-        <section class="dashboard-card topic-card">
-
-            <div class="card-header">
-
-                <div>
-
-                    <h3>
-                        Sentiment by Category
-                    </h3>
-
-                    <p>
-                        Positive, neutral and negative feedback across categories
-                    </p>
-
-                </div>
-
-            </div>
-
-            <div class="chart-container large-chart">
-
-                <canvas id="sentimentCategoryChart"></canvas>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================= RECENT FEEDBACK ================= -->
-
-        <section class="dashboard-card topic-card">
-
-            <div class="card-header">
-
-                <div>
-
-                    <h3>
-                        Recent Student Feedback
-                    </h3>
-
-                    <p>
-                        Sample feedback from the dataset
-                    </p>
-
-                </div>
-
-            </div>
-
-            <div id="feedbackTableContainer">
-
-                <p class="loading">
-                    Loading feedback...
-                </p>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================= RECOMMENDATIONS ================= -->
-
-        <section class="insights-grid">
-
-            <div class="dashboard-card">
-
-                <div class="card-header">
-
-                    <div>
-
-                        <h3>
-                            💡 Areas to Review
-                        </h3>
-
-                        <p>
-                            Categories with negative feedback in the historical dataset
-                        </p>
-
-                    </div>
-
-                </div>
-
-                <div
-                    id="recommendations"
-                    class="insights-list">
-
-                    <p class="loading">
-                        Loading recommendations...
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div class="dashboard-card">
-
-                <div class="card-header">
-
-                    <div>
-
-                        <h3>
-                            📊 Dataset Information
-                        </h3>
-
-                        <p>
-                            Current analysis dataset
-                        </p>
-
-                    </div>
-
-                </div>
-
-                <div class="insights-list">
-
-                    <div class="insight-item">
-
-                        <span>📝</span>
-
-                        <p>
-                            <strong>Total records:</strong>
-                            <span id="datasetRecords">
-                                Loading...
-                            </span>
-                        </p>
-
-                    </div>
-
-
-                    <div class="insight-item">
-
-                        <span>🤖</span>
-
-                        <p>
-                            <strong>Analysis:</strong>
-                            Sentiment, emotion and topic analysis
-                        </p>
-
-                    </div>
-
-
-                    <div class="insight-item">
-
-                        <span>🧠</span>
-
-                        <p>
-                            <strong>ML:</strong>
-                            TF-IDF and Logistic Regression
-                        </p>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-        <!-- STATUS -->
-
-        <div
-            id="dashboardStatus"
-            class="dashboard-status">
-
-            Loading dashboard data...
-
-        </div>
-
-    </main>
-
-
-    <!-- ================= JAVASCRIPT ================= -->
-
-    <script src="/js/dashboard.js"></script>
-
+  <header class="navbar">
+    <div class="nav-container">
+      <a class="logo" href="/"><span class="logo-mark" aria-hidden="true">✳</span>AI Feedback Analytics</a>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a href="/">Home</a><a href="/dashboard" class="active">Dashboard</a><a href="/feedback">Submit Feedback</a><a href="/analysis">Analytics</a><a href="/predictions">Predictions</a>
+      </nav>
+      <button id="logoutButton" class="text-button" type="button">Sign out</button>
+    </div>
+  </header>
+
+  <main class="dashboard-container">
+    <div class="dashboard-header">
+      <div><span class="eyebrow">STAFF WORKSPACE</span><h1>Student feedback dashboard</h1><p id="dashboardWelcome">Evidence-backed teaching and course insights.</p></div>
+      <div class="header-actions"><button id="refreshButton" class="secondary-btn" type="button">Refresh</button><button id="pdfButton" class="primary-btn" type="button">Download PDF report</button></div>
+    </div>
+
+    <section class="dashboard-card filter-card" aria-labelledby="filterHeading">
+      <div class="card-header"><div><h2 id="filterHeading">Choose data and filters</h2><p id="sourceDescription">Historical/demo data and live submissions are kept distinct.</p></div></div>
+      <div class="filter-grid">
+        <div><label for="sourceFilter">Data source</label><select id="sourceFilter"><option value="historical">Historical/demo dataset</option><option value="live">Live student submissions</option><option value="all">Combined (explicit)</option></select></div>
+        <div><label for="departmentFilter">Department</label><select id="departmentFilter"><option value="">All departments</option></select></div>
+        <div><label for="yearFilter">Academic year</label><select id="yearFilter"><option value="">All academic years</option></select></div>
+        <div><label for="semesterFilter">Semester</label><select id="semesterFilter"><option value="">All semesters</option></select></div>
+        <div><label for="subjectFilter">Subject</label><select id="subjectFilter"><option value="">All subjects</option></select></div>
+        <div><label for="facultyFilter">Faculty</label><select id="facultyFilter"><option value="">All faculty</option></select></div>
+        <div><label for="dateFromFilter">From</label><input id="dateFromFilter" type="date"></div>
+        <div><label for="dateToFilter">To</label><input id="dateToFilter" type="date"></div>
+      </div>
+      <div class="filter-actions"><button id="applyFiltersButton" class="primary-btn" type="button">Apply filters</button><button id="resetFiltersButton" class="secondary-btn" type="button">Reset</button><span id="filterState" class="filter-state" aria-live="polite"></span></div>
+      <div id="dataSourceNote" class="data-source-note" role="status"></div>
+    </section>
+
+    <section class="stats-grid" aria-label="Sentiment summary">
+      <article class="stat-card"><div class="stat-icon">📝</div><div><p>Total feedback</p><h2 id="totalFeedback">—</h2></div></article>
+      <article class="stat-card"><div class="stat-icon">😊</div><div><p>Positive</p><h2 id="positiveFeedback">—</h2></div></article>
+      <article class="stat-card"><div class="stat-icon">😐</div><div><p>Neutral</p><h2 id="neutralFeedback">—</h2></div></article>
+      <article class="stat-card"><div class="stat-icon">💬</div><div><p>Negative</p><h2 id="negativeFeedback">—</h2></div></article>
+    </section>
+
+    <section class="charts-grid">
+      <article class="dashboard-card"><div class="card-header"><div><h2>Sentiment distribution</h2><p>Based on the selected source and filters.</p></div></div><div class="chart-container"><canvas id="sentimentChart" aria-label="Sentiment distribution"></canvas><div id="sentimentEmpty" class="empty-state" hidden>No feedback matches these filters.</div></div></article>
+      <article class="dashboard-card"><div class="card-header"><div><h2>Aspect-wise sentiment</h2><p>Comments mentioning each teaching aspect.</p></div></div><div class="chart-container"><canvas id="aspectChart" aria-label="Aspect-wise sentiment"></canvas><div id="aspectEmpty" class="empty-state" hidden>No aspect evidence is available for this selection.</div></div></article>
+    </section>
+
+    <section class="charts-grid">
+      <article class="dashboard-card"><div class="card-header"><div><h2>Department analysis</h2><p>Sentiment across departments with submitted metadata.</p></div></div><div class="chart-container"><canvas id="departmentChart"></canvas><div id="departmentEmpty" class="empty-state" hidden>Department data has not been provided for this source.</div></div></article>
+      <article class="dashboard-card"><div class="card-header"><div><h2>Semester comparison</h2><p>Sentiment across semesters with submitted metadata.</p></div></div><div class="chart-container"><canvas id="semesterChart"></canvas><div id="semesterEmpty" class="empty-state" hidden>Semester data has not been provided for this source.</div></div></article>
+    </section>
+
+    <section class="dashboard-card topic-card"><div class="card-header"><div><h2>Aspect sentiment by semester</h2><p>Compare positive, neutral, and negative aspect mentions where semester metadata exists.</p></div></div><div id="aspectSemesterTable"><p class="empty-state">Semester metadata is not available for this source.</p></div></section>
+
+    <section class="charts-grid">
+      <article class="dashboard-card"><div class="card-header"><div><h2>Subject analysis</h2><p>Feedback counts and sentiment by subject.</p></div></div><div class="chart-container"><canvas id="subjectChart"></canvas><div id="subjectEmpty" class="empty-state" hidden>Subject data has not been provided for this source.</div></div></article>
+      <article class="dashboard-card"><div class="card-header"><div><h2>Monthly feedback trend</h2><p>Only dated live submissions are included.</p></div></div><div class="chart-container"><canvas id="trendChart"></canvas><div id="trendEmpty" class="empty-state" hidden>There is not enough dated data to show a monthly trend.</div></div></article>
+    </section>
+
+    <section class="charts-grid">
+      <article class="dashboard-card"><div class="card-header"><div><h2>Feedback categories</h2><p>Categories from the selected source.</p></div></div><div class="chart-container"><canvas id="categoryChart"></canvas><div id="categoryEmpty" class="empty-state" hidden>No category labels are available.</div></div></article>
+      <article class="dashboard-card"><div class="card-header"><div><h2>Emotion labels</h2><p>Shown only when labels exist in the selected records.</p></div></div><div class="chart-container"><canvas id="emotionChart"></canvas><div id="emotionEmpty" class="empty-state" hidden>Emotion labels are not available for this source.</div></div></article>
+    </section>
+
+    <section class="insights-grid">
+      <article class="dashboard-card"><div class="card-header"><div><h2>Evidence-based insights</h2><p>Every item comes from comments in the selected data.</p></div></div><div id="insightsContainer" class="insights-list"><p class="loading">Loading insights…</p></div></article>
+      <article class="dashboard-card"><div class="card-header"><div><h2>Teaching strengths and improvement areas</h2><p>Mentions are counts, not faculty rankings.</p></div></div><div id="recommendations" class="insights-list"><p class="loading">Loading summary…</p></div></article>
+    </section>
+
+    <section class="dashboard-card topic-card"><div class="card-header"><div><h2>Recent feedback</h2><p>Raw comments are visible only to staff authorized for this dataset.</p></div></div><div id="feedbackTableContainer"><p class="loading">Loading feedback…</p></div></section>
+
+    <section id="facultyAdminSection" class="dashboard-card admin-tools" hidden>
+      <div class="card-header"><div><h2>Faculty accounts</h2><p>Provision accounts and map each account to the exact faculty field used on submissions.</p></div></div>
+      <form id="facultyForm" class="filter-grid faculty-form">
+        <div><label for="facultyAccountEmail">Faculty email</label><input id="facultyAccountEmail" type="email" maxlength="254" required></div>
+        <div><label for="facultyAccountKey">Faculty key / display name</label><input id="facultyAccountKey" maxlength="160" required></div>
+        <div><label for="facultyAccountPassword">Temporary password (12+ characters)</label><input id="facultyAccountPassword" type="password" minlength="12" maxlength="256" required></div>
+        <div class="faculty-submit"><button class="primary-btn" type="submit">Create faculty account</button></div>
+      </form>
+      <div id="facultyAdminMessage" class="form-message" role="status" aria-live="polite"></div>
+      <div id="facultyAccountsList" class="account-list"></div>
+    </section>
+
+    <div id="dashboardStatus" class="dashboard-status" role="status" aria-live="polite">Loading dashboard data…</div>
+  </main>
+  <script src="./js/api.js"></script>
+  <script src="./js/dashboard.js"></script>
 </body>
-
 </html>
