@@ -1214,3 +1214,28 @@ footer {
 .login-switch a { color:#2563eb; font-weight:700; }
 .login-footnote { margin-top:18px; color:#64748b; font-size:13px; line-height:1.5; }
 @media(max-width:760px) { .login-wrap { grid-template-columns:1fr; gap:20px; padding:30px 18px; } .login-art { min-height:280px; padding:30px; } .login-page .navbar { height:auto; padding:14px 5%; } .login-page .navbar nav { flex-wrap:wrap; gap:12px; } }
+
+.admin-tools { display:grid; gap:20px; margin-top:24px; }
+.admin-tools[hidden] { display:none; }
+.admin-tools h2 { margin:4px 0; color:#172033; }
+.admin-tools .card-header p { color:#64748b; }
+.staff-account-form { display:grid; gap:8px; max-width:620px; margin:20px 0 24px; }
+.staff-account-form label { color:#334155; font-size:14px; font-weight:700; }
+.staff-account-form label span { color:#64748b; font-weight:400; }
+.staff-account-form input { width:100%; min-height:42px; padding:9px 11px; border:1px solid #d7dfeb; border-radius:8px; font:inherit; box-sizing:border-box; }
+.staff-account-form input:focus { outline:3px solid #2563eb22; border-color:#2563eb; }
+.staff-form-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:8px; }
+.admin-status { min-height:1.2em; margin:5px 0; color:#475569; font-size:13px; }
+.admin-status.error { color:#b42318; }
+.admin-table-wrap { width:100%; overflow-x:auto; }
+.admin-table { width:100%; border-collapse:collapse; text-align:left; font-size:13px; }
+.admin-table th,.admin-table td { padding:11px 10px; border-bottom:1px solid #e7edf5; vertical-align:top; }
+.admin-table th { color:#475569; font-size:12px; white-space:nowrap; }
+.admin-table td { color:#263449; }
+.admin-table .account-inactive { color:#94a3b8; }
+.admin-table .account-status { display:inline-block; padding:3px 8px; border-radius:999px; background:#dcfce7; color:#166534; font-size:12px; font-weight:700; }
+.admin-table .account-status.inactive { background:#f1f5f9; color:#475569; }
+.admin-table .quiet-btn,.admin-table .primary-btn { min-height:32px; padding:6px 10px; font-size:12px; white-space:nowrap; }
+.audit-details { max-width:360px; overflow-wrap:anywhere; color:#64748b !important; font-size:12px; }
+.admin-empty { padding:16px 0; color:#64748b; }
+@media(max-width:650px) { .admin-tools .card-header { align-items:flex-start; flex-direction:column; gap:12px; } .staff-account-form { max-width:none; } }

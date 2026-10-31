@@ -6,4 +6,22 @@
 <div id="insightStatus" class="dashboard-status">Loading stored feedback…</div>
 <section class="insight-cards"><article class="insight-panel"><span class="eyebrow">WHAT STUDENTS APPRECIATE</span><h2>Strengths</h2><div id="strengths" class="theme-list"></div></article><article class="insight-panel"><span class="eyebrow">WHERE STUDENTS STRUGGLE</span><h2>Areas to review</h2><div id="improvements" class="theme-list"></div></article><article class="insight-panel"><span class="eyebrow">STUDENT VOICE</span><h2>Requests</h2><div id="suggestions" class="theme-list"></div></article></section>
 <section class="dashboard-card"><div class="card-header"><div><h2>Aspect evidence</h2><p>Counts reflect stored aspect mentions. Sentiment is classified per matched feedback.</p></div></div><div id="aspectGrid" class="aspect-grid"></div><p class="method-note">This prototype uses explainable phrase and sentence rules. It does not claim perfect language understanding or infer causation. Insights support review; they do not rank or discipline faculty.</p></section>
+<section id="adminTools" class="admin-tools" hidden aria-label="Administrator tools">
+  <article class="dashboard-card">
+    <div class="card-header"><div><span class="eyebrow">ADMINISTRATORS ONLY</span><h2>Staff accounts</h2><p>Create staff access, update teacher details and faculty scope, or pause an account.</p></div></div>
+    <form id="staffAccountForm" class="staff-account-form">
+      <label for="staffNameInput">Staff name</label><input id="staffNameInput" name="name" maxlength="160" autocomplete="name" required>
+      <label for="staffEmailInput">Staff email</label><input id="staffEmailInput" name="email" type="email" maxlength="254" autocomplete="email" required>
+      <label for="staffFacultyKeyInput">Faculty key <span>(usually the email used on feedback)</span></label><input id="staffFacultyKeyInput" name="faculty_key" maxlength="160" required>
+      <div class="staff-form-actions"><button id="staffSaveButton" class="primary-btn" type="submit">Add staff account</button><button id="staffCancelEdit" class="quiet-btn" type="button" hidden>Cancel edit</button></div>
+      <p id="staffAccountStatus" class="admin-status" role="status" aria-live="polite"></p>
+    </form>
+    <div id="staffAccountList" class="admin-table-wrap" aria-live="polite"></div>
+  </article>
+  <article class="dashboard-card">
+    <div class="card-header"><div><span class="eyebrow">SECURITY HISTORY</span><h2>Audit log</h2><p>Recent sign-ins, staff account changes, and access to staff reports.</p></div><button id="refreshAuditLog" class="quiet-btn" type="button">Refresh log</button></div>
+    <div id="auditLogStatus" class="admin-status" role="status" aria-live="polite"></div>
+    <div id="auditLogList" class="admin-table-wrap"></div>
+  </article>
+</section>
 </main><script src="/js/insights.js"></script></body></html>

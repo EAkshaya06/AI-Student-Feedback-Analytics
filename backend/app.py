@@ -3,6 +3,7 @@ from flask_cors import CORS
 import pandas as pd
 import os
 import json
+import hmac
 import re
 import hashlib
 import secrets
@@ -13,9 +14,15 @@ from functools import wraps
 from datetime import datetime, timezone, timedelta
 from werkzeug.security import check_password_hash, generate_password_hash
 try:
-    from backend.storage import engine, submissions, users, teacher_login_tokens, fetch_submissions
+    from backend.storage import (
+        engine, submissions, users, teacher_login_tokens, auth_login_attempts,
+        audit_events, fetch_submissions,
+    )
 except ModuleNotFoundError:
-    from storage import engine, submissions, users, teacher_login_tokens, fetch_submissions
+    from storage import (
+        engine, submissions, users, teacher_login_tokens, auth_login_attempts,
+        audit_events, fetch_submissions,
+    )
 try:
     from backend.services.aspect_analysis import (
         analyze as analyze_text,
@@ -94,6 +101,70 @@ def current_user():
     from sqlalchemy import select
     with engine.connect() as connection:
         return connection.execute(select(users).where(users.c.id == user_id, users.c.active.is_(True))).mappings().first()
+
+
+LOGIN_ATTEMPT_LIMIT = 5
+LOGIN_ATTEMPT_WINDOW = timedelta(minutes=15)
+
+
+def _login_identifier_hash(email):
+    secret_key = app.secret_key or "local-login-throttle"
+    secret = secret_key if isinstance(secret_key, bytes) else str(secret_key).encode("utf-8")
+    value = "email:" + email.strip().lower()
+    return hmac.new(secret, value.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _login_throttle_state(email, record_failure=False):
+    from sqlalchemy import delete, func, insert, select
+
+    now = datetime.now(timezone.utc)
+    key_hash = _login_identifier_hash(email)
+    cutoff = (now - LOGIN_ATTEMPT_WINDOW).isoformat()
+    with engine.begin() as connection:
+        connection.execute(delete(auth_login_attempts).where(auth_login_attempts.c.created_at < cutoff))
+        if record_failure:
+            connection.execute(insert(auth_login_attempts).values(
+                identifier_hash=key_hash,
+                created_at=now.isoformat(),
+            ))
+        count, oldest = connection.execute(select(
+            func.count(auth_login_attempts.c.id),
+            func.min(auth_login_attempts.c.created_at),
+        ).where(
+            auth_login_attempts.c.identifier_hash == key_hash,
+            auth_login_attempts.c.created_at >= cutoff,
+        )).one()
+
+    if count < LOGIN_ATTEMPT_LIMIT or not oldest:
+        return False, 0
+    expires_at = datetime.fromisoformat(oldest) + LOGIN_ATTEMPT_WINDOW
+    retry_after = max(1, int((expires_at - now).total_seconds()))
+    return True, retry_after
+
+
+def _write_audit(connection, action, actor=None, target_email=None, details=None):
+    from sqlalchemy import insert
+
+    connection.execute(insert(audit_events).values(
+        created_at=datetime.now(timezone.utc).isoformat(),
+        actor_user_id=actor["id"] if actor else None,
+        actor_email=actor["email"] if actor else None,
+        action=action,
+        target_email=target_email,
+        details_json=json.dumps(details or {}, ensure_ascii=False, separators=(",", ":")),
+    ))
+
+
+def _login_rate_limited_response(retry_after):
+    minutes = max(1, (retry_after + 59) // 60)
+    unit = "minute" if minutes == 1 else "minutes"
+    response = jsonify({
+        "success": False,
+        "message": f"Too many unsuccessful sign-in attempts. Try again in about {minutes} {unit}.",
+    })
+    response.status_code = 429
+    response.headers["Retry-After"] = str(retry_after)
+    return response
 
 def require_roles(*roles):
     def decorate(view):
@@ -365,12 +436,36 @@ def login():
         return jsonify({"success":False,"message":"Invalid email or password."}), 400
     email = str(data.get("email", "")).strip().lower()
     password = data.get("password", "")
-    if not isinstance(password, str) or len(email) > 254 or len(password) > 256:
+    if (not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
+            or len(email) > 254 or not isinstance(password, str) or len(password) > 256):
         return jsonify({"success":False,"message":"Invalid email or password."}), 400
+
+    blocked, retry_after = _login_throttle_state(email)
+    if blocked:
+        return _login_rate_limited_response(retry_after)
+
     with engine.connect() as connection:
         user = connection.execute(select(users).where(users.c.email == email, users.c.active.is_(True))).mappings().first()
     if not user or not check_password_hash(user["password_hash"], password):
+        blocked, retry_after = _login_throttle_state(email, record_failure=True)
+        if blocked:
+            with engine.begin() as connection:
+                _write_audit(
+                    connection,
+                    "login_rate_limited",
+                    target_email=email,
+                    details={"failed_attempts": LOGIN_ATTEMPT_LIMIT, "window_minutes": 15},
+                )
+            return _login_rate_limited_response(retry_after)
         return jsonify({"success":False,"message":"Invalid email or password."}), 401
+
+    from sqlalchemy import delete
+    with engine.begin() as connection:
+        connection.execute(delete(auth_login_attempts).where(
+            auth_login_attempts.c.identifier_hash == _login_identifier_hash(email)
+        ))
+        _write_audit(connection, "login_succeeded", actor=user)
+
     session.clear()
     session.permanent = True
     session["user_id"] = user["id"]
@@ -502,6 +597,7 @@ def verify_teacher_signin_link():
             return jsonify({"success": False, "message": "This sign-in link has already been used."}), 401
         user_id = user["id"]
         display_name = user["display_name"]
+        _write_audit(connection, "teacher_login_succeeded", actor=user)
     session.clear()
     session.permanent = True
     session["user_id"] = user_id
@@ -510,6 +606,10 @@ def verify_teacher_signin_link():
 
 @app.route("/api/auth/logout", methods=["POST"])
 def logout():
+    user = current_user()
+    if user:
+        with engine.begin() as connection:
+            _write_audit(connection, "logout_succeeded", actor=user)
     session.clear()
     return jsonify({"success":True})
 
@@ -519,6 +619,29 @@ def auth_me():
     if not user:
         return jsonify({"success":False}), 401
     return jsonify({"success":True,"user":{"name":user["display_name"],"role":user["role"]}})
+
+@app.route("/api/admin/users", methods=["GET"])
+@require_roles("admin")
+def list_faculty_users():
+    from sqlalchemy import select
+    actor = current_user()
+    with engine.begin() as connection:
+        records = connection.execute(select(
+            users.c.id,
+            users.c.email,
+            users.c.display_name,
+            users.c.faculty_key,
+            users.c.active,
+        ).where(
+            users.c.role == "faculty"
+        ).order_by(users.c.email)).mappings().all()
+        _write_audit(connection, "staff_accounts_viewed", actor=actor, details={"count": len(records)})
+    return jsonify({"success": True, "users": [
+        {"id": row["id"], "email": row["email"], "name": row["display_name"],
+         "faculty_key": row["faculty_key"] or "", "active": bool(row["active"])}
+        for row in records
+    ]})
+
 
 @app.route("/api/admin/users", methods=["POST"])
 @require_roles("admin")
@@ -530,15 +653,118 @@ def create_faculty_user():
     email = str(data.get("email", "")).strip().lower()
     name = str(data.get("name", "")).strip()
     faculty_key = str(data.get("faculty_key", "")).strip()
-    password = data.get("password", "")
-    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email) or len(name) > 160 or not name or not faculty_key or len(faculty_key) > 160 or not isinstance(password, str) or len(password) < 12 or len(password) > 256:
-        return jsonify({"success":False,"message":"Provide a valid email, name, faculty key, and password with at least 12 characters."}), 400
+    password = data.get("password")
+    if (not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
+            or len(email) > 254 or len(name) > 160 or not name
+            or not faculty_key or len(faculty_key) > 160
+            or (password is not None and password != ""
+                and (not isinstance(password, str) or len(password) < 12 or len(password) > 256))):
+        return jsonify({"success":False,"message":"Provide a valid email, staff name, and faculty key. Any password must contain at least 12 characters."}), 400
+    if not password:
+        password = secrets.token_urlsafe(32)
+    actor = current_user()
     with engine.begin() as connection:
         if connection.execute(select(users.c.id).where(users.c.email == email)).first():
             return jsonify({"success":False,"message":"An account with that email already exists."}), 409
-        connection.execute(insert(users).values(email=email, display_name=name,
+        result = connection.execute(insert(users).values(email=email, display_name=name,
             password_hash=generate_password_hash(password), role="faculty", faculty_key=faculty_key, active=True))
-    return jsonify({"success":True,"message":"Faculty account created."}), 201
+        connection.execute(insert(audit_events).values(
+            created_at=datetime.now(timezone.utc).isoformat(),
+            actor_user_id=actor["id"], actor_email=actor["email"],
+            action="staff_account_created", target_email=email,
+            details_json=json.dumps({"faculty_key": faculty_key}, ensure_ascii=False),
+        ))
+        user_id = result.inserted_primary_key[0]
+    return jsonify({"success":True,"id":user_id,"message":"Faculty account created. Staff can request a one-time sign-in link by email."}), 201
+
+
+@app.route("/api/admin/users/<int:user_id>", methods=["PATCH"])
+@require_roles("admin")
+def update_faculty_user(user_id):
+    from sqlalchemy import delete, insert, select, update
+    data = request.get_json(silent=True) or {}
+    allowed = {"name", "email", "faculty_key", "active"}
+    if not isinstance(data, dict) or not data or set(data) - allowed:
+        return jsonify({"success":False,"message":"Provide valid staff account changes."}), 400
+
+    actor = current_user()
+    with engine.begin() as connection:
+        user = connection.execute(select(users).where(
+            users.c.id == user_id,
+            users.c.role == "faculty",
+        )).mappings().first()
+        if not user:
+            return jsonify({"success":False,"message":"Staff account not found."}), 404
+
+        values = {}
+        changes = {}
+        if "name" in data:
+            name = data["name"].strip() if isinstance(data["name"], str) else ""
+            if not name or len(name) > 160:
+                return jsonify({"success":False,"message":"Enter a staff name up to 160 characters."}), 400
+            if name != user["display_name"]:
+                values["display_name"] = name
+                changes["name"] = {"from": user["display_name"], "to": name}
+        if "email" in data:
+            email = data["email"].strip().lower() if isinstance(data["email"], str) else ""
+            if len(email) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+                return jsonify({"success":False,"message":"Enter a valid staff email address."}), 400
+            duplicate = connection.execute(select(users.c.id).where(
+                users.c.email == email,
+                users.c.id != user_id,
+            )).first()
+            if duplicate:
+                return jsonify({"success":False,"message":"An account with that email already exists."}), 409
+            if email != user["email"]:
+                values["email"] = email
+                changes["email"] = {"from": user["email"], "to": email}
+        if "faculty_key" in data:
+            faculty_key = data["faculty_key"].strip() if isinstance(data["faculty_key"], str) else ""
+            if not faculty_key or len(faculty_key) > 160:
+                return jsonify({"success":False,"message":"Enter a faculty key up to 160 characters."}), 400
+            if faculty_key != (user["faculty_key"] or ""):
+                values["faculty_key"] = faculty_key
+                changes["faculty_key"] = {"from": user["faculty_key"] or "", "to": faculty_key}
+        if "active" in data:
+            if not isinstance(data["active"], bool):
+                return jsonify({"success":False,"message":"Choose whether this account is active."}), 400
+            if data["active"] != bool(user["active"]):
+                values["active"] = data["active"]
+                changes["active"] = {"from": bool(user["active"]), "to": data["active"]}
+
+        if values:
+            connection.execute(update(users).where(users.c.id == user_id).values(**values))
+            if values.get("active") is False:
+                connection.execute(delete(teacher_login_tokens).where(teacher_login_tokens.c.user_id == user_id))
+            updated_email = values.get("email", user["email"])
+            connection.execute(insert(audit_events).values(
+                created_at=datetime.now(timezone.utc).isoformat(),
+                actor_user_id=actor["id"], actor_email=actor["email"],
+                action="staff_account_updated", target_email=updated_email,
+                details_json=json.dumps({"changes": changes}, ensure_ascii=False),
+            ))
+
+    return jsonify({"success":True,"message":"Staff account updated."})
+
+
+@app.route("/api/admin/audit-log", methods=["GET"])
+@require_roles("admin")
+def get_audit_log():
+    from sqlalchemy import select
+    try:
+        limit = min(100, max(1, int(request.args.get("limit", "50"))))
+    except ValueError:
+        limit = 50
+    with engine.connect() as connection:
+        rows = connection.execute(select(audit_events).order_by(
+            audit_events.c.id.desc()
+        ).limit(limit)).mappings().all()
+    return jsonify({"success":True,"events":[
+        {"id":row["id"], "created_at":row["created_at"],
+         "actor_email":row["actor_email"] or "System", "action":row["action"],
+         "target_email":row["target_email"] or "", "details":json.loads(row["details_json"] or "{}")}
+        for row in rows
+    ]})
 
 @app.route("/api/public-dataset")
 def public_dataset():
@@ -578,6 +804,10 @@ def get_feedback():
             "emotion": "Not analyzed", "created_at": row["created_at"], "department": row["department"],
             "course": row["course"], "faculty": row["faculty"], "anonymous": bool(row["anonymous"]), "analysis": result})
 
+    actor = current_user()
+    with engine.begin() as connection:
+        _write_audit(connection, "feedback_records_viewed", actor=actor, details={"count": len(records)})
+
     return jsonify({
         "success": True,
         "count": len(records),
@@ -592,6 +822,10 @@ def get_feedback():
 @app.route("/api/analytics")
 @require_roles("admin")
 def analytics():
+
+    actor = current_user()
+    with engine.begin() as connection:
+        _write_audit(connection, "analytics_viewed", actor=actor)
 
     df = normalize_data(load_data())
 
@@ -862,6 +1096,8 @@ def insight_center():
             bucket[aspect["sentiment"]] = bucket.get(aspect["sentiment"], 0) + 1
             if any(word in " ".join(aspect["evidence"]).lower() for word in ("more", "should", "need", "could", "suggest", "wish")):
                 suggestion_evidence.add(aspect["aspect"])
+    with engine.begin() as connection:
+        _write_audit(connection, "insights_viewed", actor=user, details={"stored_feedback_count": len(submissions)})
     return jsonify({"success":True,"stored_feedback_count":len(submissions),"aspects":summary,
         "strengths":sorted([k for k,v in summary.items() if v["positive"] > v["negative"] + v["improvement"]], key=lambda k: -summary[k]["mentions"]),
         "improvement_areas":sorted([k for k,v in summary.items() if v["negative"] + v["improvement"] > 0], key=lambda k: -(summary[k]["negative"] + summary[k]["improvement"])),
@@ -876,6 +1112,10 @@ def insight_center():
 @app.route("/api/recommendations")
 @require_roles("admin")
 def recommendations():
+
+    actor = current_user()
+    with engine.begin() as connection:
+        _write_audit(connection, "recommendations_viewed", actor=actor)
 
     if os.path.exists(
         RECOMMENDATION_FILE

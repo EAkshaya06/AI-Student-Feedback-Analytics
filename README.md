@@ -23,7 +23,7 @@ Before the first production deployment:
 2. In Vercel Project Settings → Environment Variables, add `DATABASE_URL`, `SECRET_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, and `PUBLIC_BASE_URL` for Production. Set `PUBLIC_BASE_URL` to the deployed site URL and use a verified mail sender. Keep all credentials private. Use a unique random `SECRET_KEY` and an admin password of at least 12 characters. Do not commit these values or paste them into source files.
 3. Redeploy after setting the variables. The first app start creates the required database tables and the initial administrator account. Later changes to `ADMIN_PASSWORD` do not reset an existing account; use the database/account administration process to change it.
 4. Check `/api/health`; a successful deployment responds with `{"status":"ok","database":"connected",...}`. Open `/login` to sign into the staff dashboard. Students submit feedback at `/feedback`.
-5. Create each faculty account by signing in as admin and sending a `POST` request to `/api/admin/users` with a JSON body containing `email`, `name`, `faculty_key`, and a password of at least 12 characters. Students can preview or submit comments without a password. The teacher email entered on the form is only a label for those comments; it does not connect to a college inbox or retrieve existing feedback. Set a faculty account's `faculty_key` to the exact teacher email used on submissions that account should be scoped to. Staff reports remain behind staff sign-in. This initial version has no staff account management screen.
+5. Sign in as admin and open `/insights` to add, edit, pause, or reactivate faculty accounts. Set each faculty account's `faculty_key` to the exact teacher email used on submissions that account should be scoped to. Faculty use the passwordless email link at `/teacher-login`; SMTP must be configured. Students can preview or submit comments without a password. The teacher email entered on the form is only a label for those comments; it does not connect to a college inbox or retrieve existing feedback. Staff reports remain behind staff sign-in.
 
 The public `/feedback` form accepts pasted comments and CSV, TSV, or TXT imports. CSV/TSV imports let the student choose the column containing comments. Files are parsed in the browser; the source file and other columns are not uploaded. The form analyzes up to 25 comments per batch.
 
@@ -31,13 +31,13 @@ Vercel Hobby is free and deployments can stay online without a 30-day trial expi
 
 ## Security and privacy notes
 
-The feedback form does not request a student identity, but free text can contain identifying details. Do not solicit names or sensitive information. The deployment provides password-based staff roles and faculty-level filtering, but it is still a prototype: it has no login rate limiting, staff account management UI, audit log, moderation workflow, or institutional privacy/security review. Do not use it for confidential or high-stakes decisions without that review.
+The feedback form does not request a student identity, but free text can contain identifying details. Do not solicit names or sensitive information. Password sign-in is limited to five failed attempts per email in a rolling 15-minute window; the short-term counter stores only keyed hashes of email identifiers. Admins can manage faculty accounts and inspect an audit log of successful sign-ins, lockouts, account changes, and staff report access. The application remains a prototype without a moderation workflow or institutional privacy/security review. Do not use it for confidential or high-stakes decisions without that review.
 
 
 
 ## Teacher sign-in
 
-The public feedback page does not require a password. Teachers use the separate `/teacher-login` page and receive a one-time link by email. Only faculty accounts already provisioned by an administrator can sign in. The link expires after 10 minutes, can be used once, and repeated requests are limited to one per minute per account. An email address alone never grants access to stored feedback.
+The public feedback page does not require a password. Teachers use the separate `/teacher-login` page and receive a one-time link by email. Only active faculty accounts provisioned by an administrator can sign in. The link expires after 10 minutes, can be used once, and repeated requests are limited to one per minute per account. Admins manage faculty from the Staff accounts section of `/insights`; pausing an account also revokes its outstanding sign-in links. An email address alone never grants access to stored feedback.
 
 ## Analysis limits
 

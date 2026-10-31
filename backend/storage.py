@@ -2,8 +2,8 @@
 import os
 from pathlib import Path
 from sqlalchemy import (
-    Boolean, Column, Integer, MetaData, String, Table, Text, create_engine,
-    select,
+    Boolean, Column, Index, Integer, MetaData, String, Table, Text,
+    create_engine, select,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -56,6 +56,25 @@ teacher_login_tokens = Table(
     Column("expires_at", String(64), nullable=False),
     Column("used_at", String(64), nullable=True),
 )
+auth_login_attempts = Table(
+    "auth_login_attempts", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("identifier_hash", String(64), nullable=False),
+    Column("created_at", String(64), nullable=False),
+    Index("ix_auth_login_attempts_identifier_created", "identifier_hash", "created_at"),
+    Index("ix_auth_login_attempts_created", "created_at"),
+)
+audit_events = Table(
+    "audit_events", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("created_at", String(64), nullable=False),
+    Column("actor_user_id", Integer, nullable=True),
+    Column("actor_email", String(254), nullable=True),
+    Column("action", String(80), nullable=False),
+    Column("target_email", String(254), nullable=True),
+    Column("details_json", Text, nullable=False, default="{}"),
+)
+Index("ix_audit_events_created", audit_events.c.created_at)
 
 metadata.create_all(engine)
 
